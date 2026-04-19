@@ -8,3 +8,39 @@ split:
   train_seasons: ["2008/2009", "2009/2010", "2010/2011", "2011/2012", "2012/2013", "2013/2014"]
   test_seasons: ["2014/2015"]
   production_seasons: ["2015/2016"]
+
+# Model training parameters
+# Model training parameters (Day 1 baseline — regularized to prevent overfitting)
+model:
+  algorithm: "lightgbm"
+  objective: "multiclass"
+  num_class: 3
+  metric: "multi_logloss"
+  
+  # Tree complexity (kept simple to avoid overfitting on 18k rows)
+  num_leaves: 15
+  max_depth: 6
+  min_child_samples: 50
+  
+  # Boosting
+  n_estimators: 1000              # plenty — early stopping will trim
+  learning_rate: 0.03
+  
+  # Regularization
+  reg_alpha: 0.1                  # L1 — shrinks noisy feature weights to 0
+  reg_lambda: 0.1                 # L2 — shrinks all weights
+  subsample: 0.8                  # each tree sees 80% of rows
+  subsample_freq: 1               # apply subsample every iteration
+  colsample_bytree: 0.8           # each tree sees 80% of features
+  
+  # Class handling
+  class_weight: "balanced"        # up-weights Draw and Away classes
+  
+  # Reproducibility
+  random_state: 42
+  verbose: -1                     # suppress LightGBM's progress logs
+
+# Validation split (used for early stopping during training)
+training:
+  val_fraction: 0.15              # last 15% of train chronologically
+  early_stopping_rounds: 50       # stop if no val improvement for this many iterations
