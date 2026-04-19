@@ -1,0 +1,40 @@
+# Conda / Python
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+.python-version
+
+# Environment & secrets
+.env
+kaggle.json
+
+# Model artifacts (versioned by DVC, not Git)
+*.pkl
+*.joblib
+*.h5
+
+# Data (versioned by DVC)
+data/raw/*.sqlite
+data/raw/*.zip
+data/raw/*.csv
+data/processed/*.csv
+data/production/*.csv
+
+# MLflow
+mlruns/
+mlflow_artifacts/
+
+# DVC
+dvc_pipeline/outputs/
+.dvc/cache/
+.dvc/tmp/
+
+# Logs
+logs/
+*.log
+
+# IDE
+.DS_Store
+.idea/
+.vscode/

@@ -1,0 +1,15 @@
+.git/
+.gitignore
+__pycache__/
+*.pyc
+.venv/
+.ipynb_checkpoints/
+data/
+models/
+mlruns/
+notebooks/
+tests/
+docs/
+deliverables/
+kaggle.json
+.env
