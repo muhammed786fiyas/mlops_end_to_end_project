@@ -14,10 +14,10 @@ services:
     container_name: football-backend
     ports:
       - "8000:8000"
-    # Expose the container's hostname via HOSTNAME so /health and /predict
-    # return a unique container ID per running instance
     environment:
       - PYTHONPATH=/app
+    volumes:
+      - ./logs:/app/logs
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
       interval: 30s
