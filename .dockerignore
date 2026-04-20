@@ -1,15 +1,39 @@
+# Git and editor junk
 .git/
 .gitignore
+.github/
+.vscode/
+.idea/
+.DS_Store
+
+# Python
 __pycache__/
 *.pyc
+*.pyo
 .venv/
+.pytest_cache/
 .ipynb_checkpoints/
-data/
-models/
-mlruns/
+
+# Credentials
+.env
+kaggle.json
+
+# Development-only files
 notebooks/
 tests/
 docs/
 deliverables/
-kaggle.json
-.env
+logs/
+
+# Broadly ignore large data/model directories...
+data/
+models/
+mlruns/
+mlflow_artifacts/
+dvc_pipeline/outputs/
+
+# explicitly include only the files the backend container needs
+!data/raw/database.sqlite
+!data/processed/team_lookup.csv
+!models/lightgbm_baseline.pkl
+!models/training_metadata.json

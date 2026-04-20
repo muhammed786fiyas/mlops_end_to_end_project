@@ -1,0 +1,47 @@
+# Dockerfile for the FastAPI backend
+#
+# Build from project root:
+#   docker build -f docker/Dockerfile.backend -t football-backend .
+
+# ---- Base image ----
+# python:3.11-slim is small (~120MB) but has everything we need
+FROM python:3.11-slim AS base
+
+# Prevent Python from writing .pyc files and buffering stdout
+# (buffering breaks Docker log capture)
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install system deps needed by LightGBM (libgomp) and SQLite (usually already present)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---- Install Python deps ----
+WORKDIR /app
+
+# Copy only requirements first — Docker will cache this layer until requirements.txt changes
+# This is Docker layer caching: rebuilds after code changes stay fast
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+# ---- Copy application code and artifacts ----
+# We copy these AFTER pip install so code changes don't invalidate the pip-install cache
+COPY src/            ./src/
+COPY config.yaml     .
+COPY params.yaml     .
+COPY models/lightgbm_baseline.pkl      ./models/
+COPY models/training_metadata.json     ./models/
+COPY data/raw/database.sqlite          ./data/raw/
+COPY data/processed/team_lookup.csv    ./data/processed/
+
+# Ensure logs directory exists (logger writes to it)
+RUN mkdir -p logs
+
+# ---- Run the server ----
+# host=0.0.0.0 is critical — without it, uvicorn only binds to localhost
+# which is unreachable from outside the container
+EXPOSE 8000
+CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

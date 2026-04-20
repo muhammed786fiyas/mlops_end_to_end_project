@@ -1,0 +1,45 @@
+# Docker Compose orchestration for the football-mlops project.
+#
+# Start:  docker compose up -d
+# Stop:   docker compose down
+# Logs:   docker compose logs -f
+# Rebuild after code changes: docker compose up -d --build
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    image: football-backend:latest
+    container_name: football-backend
+    ports:
+      - "8000:8000"
+    # Expose the container's hostname via HOSTNAME so /health and /predict
+    # return a unique container ID per running instance
+    environment:
+      - PYTHONPATH=/app
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - football-net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    image: football-frontend:latest
+    container_name: football-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - football-net
+
+networks:
+  football-net:
+    driver: bridge
