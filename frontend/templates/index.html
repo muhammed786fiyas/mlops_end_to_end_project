@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Football Match Outcome Predictor</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>⚽ Football Match Outcome Predictor</h1>
+      <p class="subtitle">LightGBM classifier trained on 18,429 European matches (2008–2014)</p>
+    </header>
+
+    <section class="picker">
+      <div class="team-select">
+        <label for="home-team">Home Team</label>
+        <select id="home-team" disabled>
+          <option>Loading teams…</option>
+        </select>
+      </div>
+
+      <div class="vs">vs</div>
+
+      <div class="team-select">
+        <label for="away-team">Away Team</label>
+        <select id="away-team" disabled>
+          <option>Loading teams…</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="date-picker">
+      <label for="match-date">Match Date</label>
+      <input type="date" id="match-date">
+      <small>Defaults to today. Features are computed as-of this date.</small>
+    </section>
+
+    <button id="predict-btn" disabled>Predict Outcome</button>
+
+    <section id="result" class="result hidden">
+      <h2 id="result-headline"></h2>
+      <div class="confidence">
+        Confidence: <strong id="confidence-value"></strong>
+      </div>
+      <div class="probabilities">
+        <div class="prob-row">
+          <span class="prob-label">Home Win</span>
+          <div class="prob-bar"><div class="prob-fill prob-h" id="prob-h"></div></div>
+          <span class="prob-value" id="prob-h-value"></span>
+        </div>
+        <div class="prob-row">
+          <span class="prob-label">Draw</span>
+          <div class="prob-bar"><div class="prob-fill prob-d" id="prob-d"></div></div>
+          <span class="prob-value" id="prob-d-value"></span>
+        </div>
+        <div class="prob-row">
+          <span class="prob-label">Away Win</span>
+          <div class="prob-bar"><div class="prob-fill prob-a" id="prob-a"></div></div>
+          <span class="prob-value" id="prob-a-value"></span>
+        </div>
+      </div>
+      <div class="meta">
+        <span>Latency: <strong id="latency"></strong></span>
+        <span>Model: <strong id="model-version"></strong></span>
+        <span>Served by: <strong id="container-id"></strong></span>
+      </div>
+    </section>
+
+    <section id="error" class="error hidden"></section>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
