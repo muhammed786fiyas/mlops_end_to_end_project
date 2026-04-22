@@ -1,0 +1,43 @@
+# DVC pipeline for the football-mlops project.
+#
+# Run the whole pipeline:  dvc repro
+# Run only one stage:      dvc repro build_features
+# See pipeline DAG:        dvc dag
+# See metrics:             dvc metrics show
+
+stages:
+  build_features:
+    cmd: python -m src.features.build_features
+    deps:
+      - src/features/build_features.py
+      - src/utils/logger.py
+      - data/raw/database.sqlite
+    params:
+      - features.rolling_window_size
+      - features.h2h_window_size
+      - split.train_seasons
+      - split.test_seasons
+      - split.production_seasons
+    outs:
+      - data/processed/train.csv
+      - data/processed/test.csv
+      - data/processed/team_lookup.csv
+      - data/production/season_2015_16.csv
+
+  train:
+    cmd: python -m src.training.train
+    deps:
+      - src/training/train.py
+      - src/utils/logger.py
+      - data/processed/train.csv
+      - data/processed/test.csv
+    params:
+      - model
+      - training
+    outs:
+      - models/lightgbm_baseline.pkl
+      - models/feature_importance.png
+      - models/training_metadata.json
+    metrics:
+      - models/metrics.json:
+          cache: false
