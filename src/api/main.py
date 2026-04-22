@@ -1,8 +1,9 @@
 """
 FastAPI backend for the football match outcome prediction service.
 
-Loads the trained LightGBM model and the FeatureService at startup, then 
-exposes three endpoints: /health, /teams, /predict.
+Loads the trained LightGBM model from the MLflow Model Registry (with local 
+pickle fallback) and the FeatureService at startup, then exposes three 
+endpoints: /health, /teams, /predict.
 
 Run locally:
     uvicorn src.api.main:app --reload --port 8000
@@ -20,6 +21,8 @@ from pathlib import Path
 from typing import Optional
 
 import joblib
+import mlflow
+import mlflow.lightgbm
 import yaml
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -47,10 +50,15 @@ PROJECT_ROOT = _project_root()
 with open(PROJECT_ROOT / "config.yaml") as f:
     CONFIG = yaml.safe_load(f)
 
-MODEL_PATH = PROJECT_ROOT / "models" / "lightgbm_baseline.pkl"
+MODEL_PATH = PROJECT_ROOT / "models" / "lightgbm_baseline.pkl"  # fallback if MLflow unavailable
 DB_PATH = PROJECT_ROOT / CONFIG['data']['raw_db']
 TEAM_LOOKUP_PATH = PROJECT_ROOT / CONFIG['data']['processed_dir'] / "team_lookup.csv"
 METADATA_PATH = PROJECT_ROOT / "models" / "training_metadata.json"
+
+# MLflow configuration for loading the registered model
+MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5000")
+MLFLOW_REGISTERED_MODEL_NAME = "football-outcome-predictor"
+MLFLOW_MODEL_STAGE = os.environ.get("MLFLOW_MODEL_STAGE", "latest")
 
 CONTAINER_ID = socket.gethostname()  # A2 pattern — proves load balancing in viva
 
@@ -83,20 +91,29 @@ async def lifespan(app: FastAPI):
     logger.info("API STARTUP — loading model and feature service")
     logger.info("=" * 60)
 
-    # Load model
-    if not MODEL_PATH.exists():
-        logger.error(f"Model file not found: {MODEL_PATH}")
-        raise RuntimeError(f"Model file missing: {MODEL_PATH}")
-    state.model = joblib.load(MODEL_PATH)
-    logger.info(f"Loaded model from {MODEL_PATH}")
+    # --- Load model from MLflow registry, with local pickle fallback ---
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    logger.info(f"MLflow tracking URI: {MLFLOW_TRACKING_URI}")
 
-    # Load model version from metadata
-    if METADATA_PATH.exists():
-        with open(METADATA_PATH) as f:
-            metadata = json.load(f)
-        state.model_version = f"baseline-{metadata.get('git_commit', 'unknown')}"
-    else:
-        state.model_version = "baseline-unknown"
+    model_uri = f"models:/{MLFLOW_REGISTERED_MODEL_NAME}/{MLFLOW_MODEL_STAGE}"
+    try:
+        logger.info(f"Attempting to load model from MLflow: {model_uri}")
+        state.model = mlflow.lightgbm.load_model(model_uri)
+        state.model_version = f"mlflow:{MLFLOW_REGISTERED_MODEL_NAME}@{MLFLOW_MODEL_STAGE}"
+        logger.info(f"Loaded model from MLflow registry")
+    except Exception as e:
+        logger.warning(f"MLflow load failed ({type(e).__name__}: {e})")
+        logger.warning(f"Falling back to local pickle: {MODEL_PATH}")
+        if not MODEL_PATH.exists():
+            raise RuntimeError(f"Model file missing: {MODEL_PATH}") from e
+        state.model = joblib.load(MODEL_PATH)
+        if METADATA_PATH.exists():
+            with open(METADATA_PATH) as f:
+                metadata = json.load(f)
+            state.model_version = f"local-{metadata.get('git_commit', 'unknown')}"
+        else:
+            state.model_version = "local-unknown"
+        logger.info(f"Loaded model from local pickle")
     logger.info(f"Model version: {state.model_version}")
 
     # Load feature service
@@ -120,12 +137,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Football Match Outcome Prediction API",
     description="Predicts H/D/A outcome for European football matches using a LightGBM classifier.",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
 # CORS — allow the frontend (on a different port) to call this API
-# In production you'd restrict origins; for dev we allow all
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

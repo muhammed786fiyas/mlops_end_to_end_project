@@ -6,6 +6,30 @@
 # Rebuild after code changes: docker compose up -d --build
 
 services:
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.11.1
+    container_name: football-mlflow
+    command:
+      - mlflow
+      - server
+      - --backend-store-uri
+      - sqlite:////mlflow/mlflow.db
+      - --default-artifact-root
+      - /mlflow/mlflow_artifacts
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
+      - --allowed-hosts
+      - "*"
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlflow.db:/mlflow/mlflow.db
+      - ./mlflow_artifacts:/mlflow/mlflow_artifacts
+    networks:
+      - football-net
+
   backend:
     build:
       context: .
@@ -16,14 +40,19 @@ services:
       - "8000:8000"
     environment:
       - PYTHONPATH=/app
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
     volumes:
       - ./logs:/app/logs
+      - ./data/processed:/app/data/processed
+      - ./models:/app/models
+    depends_on:
+      - mlflow
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
     networks:
       - football-net
 
