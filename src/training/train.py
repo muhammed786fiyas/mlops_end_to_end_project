@@ -6,8 +6,9 @@ evaluates on a held-out test set, logs everything to MLflow, and
 persists artifacts to disk.
 
 Usage:
-    python -m src.training.train
+    python -m src.training.train                    # standalone
     python -m src.training.train --learning-rate 0.05 --num-leaves 31
+    mlflow run . --env-manager=local                # via MLproject
 """
 
 import argparse
@@ -40,8 +41,6 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 # MLflow configuration
 # ---------------------------------------------------------------------------
-# Read tracking URI from environment so Docker containers can override it.
-# Default to localhost:5000 for local dev.
 MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5000")
 MLFLOW_EXPERIMENT_NAME = "football-prediction"
 MLFLOW_REGISTERED_MODEL_NAME = "football-outcome-predictor"
@@ -51,8 +50,6 @@ MLFLOW_REGISTERED_MODEL_NAME = "football-outcome-predictor"
 # Constants
 # ---------------------------------------------------------------------------
 
-# Whitelist of feature columns. Any column not in this list is excluded from
-# training to prevent accidental leakage (e.g., team_goal columns).
 FEATURE_COLUMNS = [
     'home_form_wins', 'home_form_draws', 'home_form_losses',
     'home_form_gs_avg', 'home_form_gc_avg',
@@ -67,7 +64,7 @@ FEATURE_COLUMNS = [
     'away_defencePressure', 'away_defenceAggression', 'away_defenceTeamWidth',
 ]
 TARGET_COLUMN = 'outcome_encoded'
-TARGET_NAMES = ['H', 'D', 'A']  # index = encoded value
+TARGET_NAMES = ['H', 'D', 'A']
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +72,6 @@ TARGET_NAMES = ['H', 'D', 'A']  # index = encoded value
 # ---------------------------------------------------------------------------
 
 def load_train_test(processed_dir: Path) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
-    """Load train/test CSVs and split into X/y using the FEATURE_COLUMNS whitelist."""
     logger.info(f"Loading train/test from {processed_dir}")
 
     train_df = pd.read_csv(processed_dir / "train.csv")
@@ -105,7 +101,6 @@ def load_train_test(processed_dir: Path) -> tuple[pd.DataFrame, pd.Series, pd.Da
 def chronological_train_val_split(
     X: pd.DataFrame, y: pd.Series, val_fraction: float
 ) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
-    """Carve a validation set from the END of train (preserves time-ordering)."""
     n_val = int(len(X) * val_fraction)
     X_train_fit = X.iloc[:-n_val]
     y_train_fit = y.iloc[:-n_val]
@@ -120,7 +115,6 @@ def train_model(
     X_val: pd.DataFrame, y_val: pd.Series,
     model_params: dict, early_stopping_rounds: int,
 ) -> lgb.LGBMClassifier:
-    """Train LightGBM with early stopping on the validation set."""
     logger.info("Training LightGBM classifier")
     logger.info(f"  num_leaves={model_params['num_leaves']}, "
                 f"learning_rate={model_params['learning_rate']}, "
@@ -144,7 +138,6 @@ def train_model(
 
 
 def evaluate(model: lgb.LGBMClassifier, X: pd.DataFrame, y: pd.Series, split_name: str) -> dict:
-    """Compute Macro F1, ROC-AUC, accuracy, per-class F1, confusion matrix."""
     logger.info(f"Evaluating on {split_name} set ({len(X):,} rows)")
 
     y_pred = model.predict(X)
@@ -175,10 +168,8 @@ def save_artifacts(
     model: lgb.LGBMClassifier, metrics: dict, model_params: dict,
     n_train: int, n_val: int, n_test: int, models_dir: Path,
 ) -> None:
-    """Save model pickle, metrics JSON, training metadata JSON, and feature importance plot."""
     models_dir.mkdir(parents=True, exist_ok=True)
 
-    # Get git commit hash for traceability (A1 pattern)
     try:
         git_hash = subprocess.check_output(
             ['git', 'rev-parse', '--short', 'HEAD'],
@@ -187,18 +178,15 @@ def save_artifacts(
     except Exception:
         git_hash = "unknown"
 
-    # 1. Model pickle
     model_path = models_dir / "lightgbm_baseline.pkl"
     joblib.dump(model, model_path)
     logger.info(f"Saved model: {model_path}")
 
-    # 2. Metrics JSON
     metrics_path = models_dir / "metrics.json"
     with open(metrics_path, 'w') as f:
         json.dump(metrics, f, indent=2)
     logger.info(f"Saved metrics: {metrics_path}")
 
-    # 3. Training metadata JSON
     metadata = {
         'training_date': datetime.now().isoformat(),
         'git_commit': git_hash,
@@ -218,7 +206,6 @@ def save_artifacts(
         json.dump(metadata, f, indent=2)
     logger.info(f"Saved metadata: {metadata_path}")
 
-    # 4. Feature importance plot
     fig, ax = plt.subplots(figsize=(10, 8))
     importances = pd.Series(model.feature_importances_, index=FEATURE_COLUMNS).sort_values(ascending=True)
     importances.plot(kind='barh', ax=ax)
@@ -254,10 +241,14 @@ def main(
     logger.info("=" * 60)
 
     # --- MLflow setup ---
-    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-    mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
-    logger.info(f"MLflow tracking URI: {MLFLOW_TRACKING_URI}")
-    logger.info(f"MLflow experiment:   {MLFLOW_EXPERIMENT_NAME}")
+    # If called via `mlflow run`, MLflow already configured tracking + started a run.
+    # Otherwise, we set it up ourselves for standalone execution.
+    invoked_via_mlflow_run = "MLFLOW_RUN_ID" in os.environ
+    if not invoked_via_mlflow_run:
+        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+        mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
+    logger.info(f"MLflow tracking URI: {mlflow.get_tracking_uri()}")
+    logger.info(f"Invoked via mlflow run: {invoked_via_mlflow_run}")
 
     project_root = _project_root()
     with open(project_root / "config.yaml") as f:
@@ -268,7 +259,7 @@ def main(
     processed_dir = project_root / config['data']['processed_dir']
     models_dir = project_root / "models"
 
-    # Apply CLI overrides if provided
+    # Apply CLI overrides
     model_params = dict(params['model'])
     if learning_rate is not None:
         model_params['learning_rate'] = learning_rate
@@ -277,7 +268,6 @@ def main(
     if n_estimators is not None:
         model_params['n_estimators'] = n_estimators
 
-    # Get git commit hash for traceability
     try:
         git_hash = subprocess.check_output(
             ['git', 'rev-parse', '--short', 'HEAD'],
@@ -293,30 +283,25 @@ def main(
         f"-window{params['features']['rolling_window_size']}"
         f"-{git_hash}"
     )
-    with mlflow.start_run(run_name=run_name) as run:
+    # If `mlflow run` started a run, attach to it. Otherwise, create a new one.
+    start_run_kwargs = {"run_name": run_name}
+
+    with mlflow.start_run(**start_run_kwargs) as run:
         run_id = run.info.run_id
         logger.info(f"MLflow run_id: {run_id}")
 
-        # Log tags for filtering in the UI
         mlflow.set_tags({
             "git_commit": git_hash,
             "stage": "dvc_train",
             "framework": "lightgbm",
             "dataset": "european_soccer",
+            "run_label": run_name,
         })
 
-        # Log all model params
         mlflow.log_params(model_params)
-        # Log training settings (prefixed)
-        mlflow.log_params({
-            f"training.{k}": v for k, v in params['training'].items()
-        })
-        # Log feature engineering params (so we know which data version produced these metrics)
-        mlflow.log_params({
-            f"features.{k}": v for k, v in params['features'].items()
-        })
+        mlflow.log_params({f"training.{k}": v for k, v in params['training'].items()})
+        mlflow.log_params({f"features.{k}": v for k, v in params['features'].items()})
 
-        # --- Pipeline ---
         X_train, y_train, X_test, y_test = load_train_test(processed_dir)
         X_train_fit, y_train_fit, X_val, y_val = chronological_train_val_split(
             X_train, y_train, val_fraction=params['training']['val_fraction']
@@ -327,7 +312,6 @@ def main(
             early_stopping_rounds=params['training']['early_stopping_rounds'],
         )
 
-        # Log data sizes and best iteration
         mlflow.log_params({
             "n_train": len(X_train_fit),
             "n_val": len(X_val),
@@ -336,13 +320,11 @@ def main(
         })
         mlflow.log_metric("best_iteration", model.best_iteration_)
 
-        # Evaluate on all 3 splits
         train_metrics = evaluate(model, X_train_fit, y_train_fit, 'train')
         val_metrics = evaluate(model, X_val, y_val, 'val')
         test_metrics = evaluate(model, X_test, y_test, 'test')
         all_metrics = {'train': train_metrics, 'val': val_metrics, 'test': test_metrics}
 
-        # --- Log metrics to MLflow ---
         for split_name, m in all_metrics.items():
             mlflow.log_metrics({
                 f"{split_name}_macro_f1": m['macro_f1'],
@@ -353,19 +335,16 @@ def main(
                 f"{split_name}_f1_A": m['per_class_f1']['A'],
             })
 
-        # Persist artifacts to disk (for DVC) AND log to MLflow
         save_artifacts(
             model=model, metrics=all_metrics, model_params=model_params,
             n_train=len(X_train_fit), n_val=len(X_val), n_test=len(X_test),
             models_dir=models_dir,
         )
 
-        # --- Log artifacts to MLflow ---
         mlflow.log_artifact(str(models_dir / "metrics.json"))
         mlflow.log_artifact(str(models_dir / "training_metadata.json"))
         mlflow.log_artifact(str(models_dir / "feature_importance.png"))
 
-        # --- Log the model with auto-registration in the Model Registry ---
         mlflow.lightgbm.log_model(
             lgb_model=model,
             name="model",
@@ -376,7 +355,7 @@ def main(
 
     logger.info("=" * 60)
     logger.info(f"TRAINING PIPELINE — COMPLETE | Test Macro F1 = {test_metrics['macro_f1']:.4f}")
-    logger.info(f"MLflow run URL: {MLFLOW_TRACKING_URI}/#/experiments/?runsFilter={run_id}")
+    logger.info(f"MLflow run ID: {run_id}")
     logger.info("=" * 60)
 
 

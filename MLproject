@@ -1,0 +1,23 @@
+name: football-mlops
+
+conda_env: conda.yaml
+
+entry_points:
+  train:
+    parameters:
+      learning_rate: {type: float, default: 0.03}
+      num_leaves: {type: int, default: 15}
+      n_estimators: {type: int, default: 1000}
+    command: "python -m src.training.train --learning-rate {learning_rate} --num-leaves {num_leaves} --n-estimators {n_estimators}"
+
+  build_features:
+    parameters:
+      rolling_window: {type: int, default: 5}
+      h2h_window: {type: int, default: 5}
+    command: "python -m src.features.build_features --rolling-window {rolling_window} --h2h-window {h2h_window}"
+
+  main:
+    parameters:
+      learning_rate: {type: float, default: 0.03}
+      num_leaves: {type: int, default: 15}
+    command: "python -m src.training.train --learning-rate {learning_rate} --num-leaves {num_leaves}"
