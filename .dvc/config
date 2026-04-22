@@ -1,0 +1,5 @@
+[core]
+    remote = local
+    analytics = false
+['remote "local"']
+    url = ../../dvc_remote_football
