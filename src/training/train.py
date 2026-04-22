@@ -2,8 +2,8 @@
 Training pipeline for the football-mlops project.
 
 Loads engineered features, trains a regularized LightGBM classifier, 
-evaluates on a held-out test set, and persists the model + metrics + 
-metadata to disk.
+evaluates on a held-out test set, logs everything to MLflow, and 
+persists artifacts to disk.
 
 Usage:
     python -m src.training.train
@@ -12,6 +12,7 @@ Usage:
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime
@@ -21,6 +22,8 @@ from typing import Optional
 import joblib
 import lightgbm as lgb
 import matplotlib.pyplot as plt
+import mlflow
+import mlflow.lightgbm
 import numpy as np
 import pandas as pd
 import yaml
@@ -32,6 +35,16 @@ from sklearn.metrics import (
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# MLflow configuration
+# ---------------------------------------------------------------------------
+# Read tracking URI from environment so Docker containers can override it.
+# Default to localhost:5000 for local dev.
+MLFLOW_TRACKING_URI = os.environ.get("MLFLOW_TRACKING_URI", "http://localhost:5000")
+MLFLOW_EXPERIMENT_NAME = "football-prediction"
+MLFLOW_REGISTERED_MODEL_NAME = "football-outcome-predictor"
 
 
 # ---------------------------------------------------------------------------
@@ -235,10 +248,16 @@ def main(
     num_leaves: Optional[int] = None,
     n_estimators: Optional[int] = None,
 ):
-    """Run the training pipeline end-to-end."""
+    """Run the training pipeline end-to-end with MLflow tracking."""
     logger.info("=" * 60)
     logger.info("TRAINING PIPELINE — START")
     logger.info("=" * 60)
+
+    # --- MLflow setup ---
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+    mlflow.set_experiment(MLFLOW_EXPERIMENT_NAME)
+    logger.info(f"MLflow tracking URI: {MLFLOW_TRACKING_URI}")
+    logger.info(f"MLflow experiment:   {MLFLOW_EXPERIMENT_NAME}")
 
     project_root = _project_root()
     with open(project_root / "config.yaml") as f:
@@ -258,32 +277,106 @@ def main(
     if n_estimators is not None:
         model_params['n_estimators'] = n_estimators
 
-    # Pipeline
-    X_train, y_train, X_test, y_test = load_train_test(processed_dir)
-    X_train_fit, y_train_fit, X_val, y_val = chronological_train_val_split(
-        X_train, y_train, val_fraction=params['training']['val_fraction']
-    )
-    model = train_model(
-        X_train_fit, y_train_fit, X_val, y_val,
-        model_params=model_params,
-        early_stopping_rounds=params['training']['early_stopping_rounds'],
-    )
+    # Get git commit hash for traceability
+    try:
+        git_hash = subprocess.check_output(
+            ['git', 'rev-parse', '--short', 'HEAD'],
+            cwd=project_root, stderr=subprocess.DEVNULL
+        ).decode().strip()
+    except Exception:
+        git_hash = "unknown"
 
-    # Evaluate on all 3 splits
-    train_metrics = evaluate(model, X_train_fit, y_train_fit, 'train')
-    val_metrics = evaluate(model, X_val, y_val, 'val')
-    test_metrics = evaluate(model, X_test, y_test, 'test')
-    all_metrics = {'train': train_metrics, 'val': val_metrics, 'test': test_metrics}
-
-    # Persist
-    save_artifacts(
-        model=model, metrics=all_metrics, model_params=model_params,
-        n_train=len(X_train_fit), n_val=len(X_val), n_test=len(X_test),
-        models_dir=models_dir,
+    # --- Start MLflow run ---
+    run_name = (
+        f"lgbm-lr{model_params['learning_rate']}"
+        f"-leaves{model_params['num_leaves']}"
+        f"-window{params['features']['rolling_window_size']}"
+        f"-{git_hash}"
     )
+    with mlflow.start_run(run_name=run_name) as run:
+        run_id = run.info.run_id
+        logger.info(f"MLflow run_id: {run_id}")
+
+        # Log tags for filtering in the UI
+        mlflow.set_tags({
+            "git_commit": git_hash,
+            "stage": "dvc_train",
+            "framework": "lightgbm",
+            "dataset": "european_soccer",
+        })
+
+        # Log all model params
+        mlflow.log_params(model_params)
+        # Log training settings (prefixed)
+        mlflow.log_params({
+            f"training.{k}": v for k, v in params['training'].items()
+        })
+        # Log feature engineering params (so we know which data version produced these metrics)
+        mlflow.log_params({
+            f"features.{k}": v for k, v in params['features'].items()
+        })
+
+        # --- Pipeline ---
+        X_train, y_train, X_test, y_test = load_train_test(processed_dir)
+        X_train_fit, y_train_fit, X_val, y_val = chronological_train_val_split(
+            X_train, y_train, val_fraction=params['training']['val_fraction']
+        )
+        model = train_model(
+            X_train_fit, y_train_fit, X_val, y_val,
+            model_params=model_params,
+            early_stopping_rounds=params['training']['early_stopping_rounds'],
+        )
+
+        # Log data sizes and best iteration
+        mlflow.log_params({
+            "n_train": len(X_train_fit),
+            "n_val": len(X_val),
+            "n_test": len(X_test),
+            "n_features": len(FEATURE_COLUMNS),
+        })
+        mlflow.log_metric("best_iteration", model.best_iteration_)
+
+        # Evaluate on all 3 splits
+        train_metrics = evaluate(model, X_train_fit, y_train_fit, 'train')
+        val_metrics = evaluate(model, X_val, y_val, 'val')
+        test_metrics = evaluate(model, X_test, y_test, 'test')
+        all_metrics = {'train': train_metrics, 'val': val_metrics, 'test': test_metrics}
+
+        # --- Log metrics to MLflow ---
+        for split_name, m in all_metrics.items():
+            mlflow.log_metrics({
+                f"{split_name}_macro_f1": m['macro_f1'],
+                f"{split_name}_roc_auc": m['roc_auc_ovr_macro'],
+                f"{split_name}_accuracy": m['accuracy'],
+                f"{split_name}_f1_H": m['per_class_f1']['H'],
+                f"{split_name}_f1_D": m['per_class_f1']['D'],
+                f"{split_name}_f1_A": m['per_class_f1']['A'],
+            })
+
+        # Persist artifacts to disk (for DVC) AND log to MLflow
+        save_artifacts(
+            model=model, metrics=all_metrics, model_params=model_params,
+            n_train=len(X_train_fit), n_val=len(X_val), n_test=len(X_test),
+            models_dir=models_dir,
+        )
+
+        # --- Log artifacts to MLflow ---
+        mlflow.log_artifact(str(models_dir / "metrics.json"))
+        mlflow.log_artifact(str(models_dir / "training_metadata.json"))
+        mlflow.log_artifact(str(models_dir / "feature_importance.png"))
+
+        # --- Log the model with auto-registration in the Model Registry ---
+        mlflow.lightgbm.log_model(
+            lgb_model=model,
+            name="model",
+            registered_model_name=MLFLOW_REGISTERED_MODEL_NAME,
+            input_example=X_test.head(3),
+        )
+        logger.info(f"Model registered as '{MLFLOW_REGISTERED_MODEL_NAME}'")
 
     logger.info("=" * 60)
     logger.info(f"TRAINING PIPELINE — COMPLETE | Test Macro F1 = {test_metrics['macro_f1']:.4f}")
+    logger.info(f"MLflow run URL: {MLFLOW_TRACKING_URI}/#/experiments/?runsFilter={run_id}")
     logger.info("=" * 60)
 
 

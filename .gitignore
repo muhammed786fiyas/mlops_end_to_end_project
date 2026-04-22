@@ -24,6 +24,7 @@ data/production/*.csv
 # MLflow
 mlruns/
 mlflow_artifacts/
+mlflow.db
 
 # DVC
 dvc_pipeline/outputs/
