@@ -39,3 +39,8 @@ logs/
 .DS_Store
 .idea/
 .vscode/
+
+# Airflow runtime artifacts
+airflow/logs/
+airflow/plugins/__pycache__/
+data/triggers/retrain_trigger.txt

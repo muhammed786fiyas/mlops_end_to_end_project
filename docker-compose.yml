@@ -1,9 +1,49 @@
 # Docker Compose orchestration for the football-mlops project.
 #
+# Services:
+#   - mlflow            : MLflow tracking server + Model Registry (port 5000)
+#   - backend           : FastAPI prediction service (port 8000)
+#   - frontend          : Nginx serving static UI (port 8080)
+#   - postgres          : Airflow metadata DB (internal only)
+#   - airflow-init      : One-shot DB initialization
+#   - airflow-scheduler : Airflow scheduler (runs DAGs)
+#   - airflow-webserver : Airflow UI (port 8081)
+#
 # Start:  docker compose up -d
 # Stop:   docker compose down
-# Logs:   docker compose logs -f
-# Rebuild after code changes: docker compose up -d --build
+
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.airflow
+  image: football-airflow:latest
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__FERNET_KEY: ''
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: 'false'
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: 'admin:admin'
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: '/opt/airflow/config/simple_auth_manager_passwords.json.generated'
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-webserver:8080/execution/'
+    AIRFLOW__API__BASE_URL: 'http://airflow-webserver:8080/'
+    AIRFLOW__API_AUTH__JWT_SECRET: 'change-me-in-production-please'
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    MLFLOW_TRACKING_URI: http://mlflow:5000
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/logs:/opt/airflow/logs
+    - ./airflow/plugins:/opt/airflow/plugins
+    - ./airflow/config:/opt/airflow/config
+    - ./:/opt/airflow/project
+    - ./mlflow_artifacts:/mlflow/mlflow_artifacts
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on:
+    postgres:
+      condition: service_healthy
+  networks:
+    - football-net
 
 services:
   mlflow:
@@ -69,6 +109,69 @@ services:
     networks:
       - football-net
 
+  postgres:
+    image: postgres:16
+    container_name: football-postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    networks:
+      - football-net
+
+  airflow-init:
+    <<: *airflow-common
+    container_name: football-airflow-init
+    command:
+      - bash
+      - -c
+      - |
+        set -e
+        echo "Running airflow db migrate..."
+        airflow db migrate
+        echo "Init complete."
+    restart: "no"
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: football-airflow-scheduler
+    command: scheduler
+    restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: football-airflow-webserver
+    command: api-server
+    ports:
+      - "8081:8080"
+    restart: always
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
 networks:
   football-net:
     driver: bridge
+
+volumes:
+  postgres-db-volume:
