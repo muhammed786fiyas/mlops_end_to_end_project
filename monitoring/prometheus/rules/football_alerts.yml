@@ -1,0 +1,68 @@
+# Football MLOps alert rules.
+#
+# Three alerts covering the Four Golden Signals:
+#   1. BackendDown    — service unreachable (Traffic = 0, Errors irrelevant)
+#   2. HighErrorRate  — Errors signal saturated
+#   3. SlowInference  — Latency p95 SLO breach
+#
+# Each alert has:
+#   - expr: PromQL that evaluates true when the condition fires
+#   - for:  duration condition must hold (suppresses flapping)
+#   - labels: routing keys consumed by AlertManager
+#   - annotations: human-readable text rendered in notifications
+
+groups:
+  - name: football_backend_health
+    interval: 15s
+    rules:
+
+      # ----------------------------------------------------------------
+      # 1. CRITICAL: backend is unreachable
+      # ----------------------------------------------------------------
+      # 'up' is a synthetic metric Prometheus generates for every scrape:
+      #   1 = scrape succeeded, 0 = scrape failed (connection refused etc).
+      # 'for: 1m' means the condition must hold for 60 seconds before
+      # firing — a single failed scrape isn't enough.
+      - alert: BackendDown
+        expr: up{job="football-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: football-backend
+        annotations:
+          summary: "Football backend is down"
+          description: "Prometheus has been unable to scrape the backend at {{ $labels.instance }} for over 1 minute. Predictions are unavailable."
+
+      # ----------------------------------------------------------------
+      # 2. WARNING: error rate above threshold
+      # ----------------------------------------------------------------
+      # rate() over 5 minutes converts the monotonic counter to req/sec.
+      # >0.5 errors/sec sustained for 2 minutes ≈ 60 errors over 2 min.
+      # Threshold tuned to ignore one-off bad inputs but catch a sustained
+      # problem (e.g., a malformed client looping on bad team_ids).
+      - alert: HighErrorRate
+        expr: sum(rate(football_prediction_errors_total[5m])) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+          service: football-backend
+        annotations:
+          summary: "High prediction error rate"
+          description: "Backend is returning errors at {{ $value | humanize }} req/sec over the last 5 minutes. Investigate the backend logs for a stuck client or a feature service issue."
+
+      # ----------------------------------------------------------------
+      # 3. WARNING: p95 latency SLO breach
+      # ----------------------------------------------------------------
+      # histogram_quantile() interpolates the 95th percentile from the
+      # _bucket counters. 250ms threshold sits well above our observed
+      # ~75ms p95, so it only fires on real degradation (e.g., MLflow
+      # network latency or a feature service slowdown).
+      - alert: SlowInference
+        expr: histogram_quantile(0.95, sum by (le) (rate(football_prediction_latency_seconds_bucket[5m]))) > 0.25
+        for: 3m
+        labels:
+          severity: warning
+          service: football-backend
+        annotations:
+          summary: "Inference latency p95 above SLO"
+          description: "p95 latency is {{ $value | humanizeDuration }} over the last 5 minutes, exceeding the 250ms SLO. Check CPU saturation, MLflow connectivity, or feature service performance."

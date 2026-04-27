@@ -1,6 +1,8 @@
 {
-  "annotations": { "list": [] },
-  "description": "Football MLOps — service overview dashboard. Top row: instant health stats. Middle row: time-series for traffic and latency. Bottom row: error and model-info breakdowns.",
+  "annotations": {
+    "list": []
+  },
+  "description": "Football MLOps \u2014 service overview dashboard. Top row: instant health stats. Middle row: time-series for traffic and latency. Bottom row: error and model-info breakdowns.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -9,93 +11,181 @@
   "liveNow": false,
   "panels": [
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "1 = backend is being scraped successfully by Prometheus. 0 = backend is unreachable or returning errors. Goes red on a real outage.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "mappings": [
-            { "type": "value", "options": { "0": { "color": "red", "text": "DOWN" }, "1": { "color": "green", "text": "UP" } } }
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "color": "red",
+                  "text": "DOWN"
+                },
+                "1": {
+                  "color": "green",
+                  "text": "UP"
+                }
+              }
+            }
           ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 1 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
             ]
           }
         }
       },
-      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
       "id": 10,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
       "targets": [
-        { "expr": "up{job=\"football-backend\"}", "legendFormat": "Backend", "refId": "A" }
+        {
+          "expr": "up{job=\"football-backend\"}",
+          "legendFormat": "Backend",
+          "refId": "A"
+        }
       ],
       "title": "Backend Status",
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "Total predictions ever served since the current backend container started. Resets on restart.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
-            "steps": [{ "color": "blue", "value": null }]
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
           },
           "unit": "short"
         }
       },
-      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
       "id": 11,
       "options": {
         "colorMode": "value",
         "graphMode": "area",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
       "targets": [
-        { "expr": "sum(football_predictions_total)", "legendFormat": "Total", "refId": "A" }
+        {
+          "expr": "sum(football_predictions_total)",
+          "legendFormat": "Total",
+          "refId": "A"
+        }
       ],
       "title": "Total Predictions Served",
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "Backend container's CPU usage as a percentage of one CPU core. Computed from process_cpu_seconds_total. >50% sustained means we should investigate.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 50 },
-              { "color": "red", "value": 80 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
             ]
           },
           "unit": "percent"
         }
       },
-      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
       "id": 12,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
       "targets": [
@@ -109,30 +199,55 @@
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "Resident memory used by the backend container's Python process. Includes the loaded LightGBM model + feature service caches.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 500 },
-              { "color": "red", "value": 1000 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 500
+              },
+              {
+                "color": "red",
+                "value": 1000
+              }
             ]
           },
           "unit": "decmbytes"
         }
       },
-      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
       "id": 13,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
       "targets": [
@@ -146,11 +261,16 @@
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "Predictions per second, broken down by predicted class (H/D/A). Uses 1-minute rate window. Heavy class skew can indicate model bias or data drift.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisLabel": "predictions/sec",
             "drawStyle": "line",
@@ -161,16 +281,35 @@
             "pointSize": 5,
             "showPoints": "never",
             "spanNulls": true,
-            "stacking": { "mode": "normal", "group": "A" }
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
           },
           "unit": "reqps"
         }
       },
-      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 5 },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
       "id": 1,
       "options": {
-        "legend": { "calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
@@ -183,11 +322,16 @@
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "End-to-end prediction latency percentiles, computed from the histogram buckets. p95 < 200ms is our informal SLO.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisLabel": "seconds",
             "drawStyle": "line",
@@ -200,11 +344,27 @@
           "unit": "s"
         }
       },
-      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 5 },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
       "id": 2,
       "options": {
-        "legend": { "calcs": ["lastNotNull", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
@@ -227,30 +387,55 @@
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "Current error rate (errors/sec, 5-min average). Drives the alert in M5.4.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 0.1 },
-              { "color": "red", "value": 0.5 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.1
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
             ]
           },
           "unit": "reqps"
         }
       },
-      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 14 },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 14
+      },
       "id": 3,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
       "targets": [
@@ -264,21 +449,49 @@
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "Total errors broken down by HTTP status code. 400 = client error (bad input), 500 = server error (model failure).",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" }
+          "color": {
+            "mode": "palette-classic"
+          }
         }
       },
-      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 14 },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 14
+      },
       "id": 4,
       "options": {
-        "displayLabels": ["percent"],
-        "legend": { "displayMode": "list", "placement": "right", "showLegend": true, "values": ["value"] },
+        "displayLabels": [
+          "percent"
+        ],
+        "legend": {
+          "displayMode": "list",
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "value"
+          ]
+        },
         "pieType": "donut",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "tooltip": { "mode": "single", "sort": "none" }
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
       },
       "targets": [
         {
@@ -291,21 +504,50 @@
       "type": "piechart"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "description": "Distribution of predicted classes (H/D/A). Heavy skew is a model-drift signal — a healthy model should reflect roughly the natural football outcome distribution (~46% H / ~25% D / ~29% A).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Distribution of predicted classes (H/D/A). Heavy skew is a model-drift signal \u2014 a healthy model should reflect roughly the natural football outcome distribution (~46% H / ~25% D / ~29% A).",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" }
+          "color": {
+            "mode": "palette-classic"
+          }
         }
       },
-      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 14 },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 12,
+        "y": 14
+      },
       "id": 14,
       "options": {
-        "displayLabels": ["percent", "name"],
-        "legend": { "displayMode": "list", "placement": "right", "showLegend": true, "values": ["value"] },
+        "displayLabels": [
+          "percent",
+          "name"
+        ],
+        "legend": {
+          "displayMode": "list",
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "value"
+          ]
+        },
         "pieType": "donut",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "tooltip": { "mode": "single", "sort": "none" }
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
       },
       "targets": [
         {
@@ -318,20 +560,50 @@
       "type": "piechart"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "description": "Currently loaded model version and source. Source=mlflow means model came from registry; source=local means fallback pickle.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
-          "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "inspect": false },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green" }] }
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          }
         }
       },
-      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 14 },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 18,
+        "y": 14
+      },
       "id": 5,
       "options": {
         "cellHeight": "sm",
-        "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false },
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
         "showHeader": true
       },
       "targets": [
@@ -347,9 +619,97 @@
         {
           "id": "organize",
           "options": {
-            "excludeByName": { "Time": true, "Value": true, "__name__": true, "instance": true, "job": true, "component": true, "service": true },
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "__name__": true,
+              "instance": true,
+              "job": true,
+              "component": true,
+              "service": true
+            },
             "indexByName": {},
-            "renameByName": { "version": "Model Version", "source": "Source" }
+            "renameByName": {
+              "version": "Model Version",
+              "source": "Source"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Currently firing or pending Prometheus alerts. Empty in normal operation; populated during incidents. Resolved notifications are suppressed for alerts shorter than the AlertManager group_interval (5m).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "id": 15,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "show": false,
+          "reducer": [
+            "sum"
+          ]
+        },
+        "showHeader": true
+      },
+      "targets": [
+        {
+          "expr": "ALERTS",
+          "format": "table",
+          "instant": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Active Alerts",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "__name__": true,
+              "instance": true,
+              "job": true
+            },
+            "renameByName": {
+              "alertname": "Alert",
+              "alertstate": "State",
+              "severity": "Severity",
+              "service": "Service"
+            }
           }
         }
       ],
@@ -358,13 +718,21 @@
   ],
   "refresh": "10s",
   "schemaVersion": 39,
-  "tags": ["football-mlops", "ml-serving"],
-  "templating": { "list": [] },
-  "time": { "from": "now-30m", "to": "now" },
+  "tags": [
+    "football-mlops",
+    "ml-serving"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Football MLOps — Service Overview",
+  "title": "Football MLOps \u2014 Service Overview",
   "uid": "football-overview",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }

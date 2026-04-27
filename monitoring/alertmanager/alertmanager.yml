@@ -1,0 +1,49 @@
+# AlertManager configuration.
+#
+# Receives alerts from Prometheus, groups them, applies inhibition rules,
+# and routes to receivers. For an academic project we use a webhook stub
+# (the 'webhook-logger' container) instead of real email — same pattern
+# as production, just a different receiver URL.
+
+global:
+  resolve_timeout: 5m
+
+# Routing tree: where alerts go after they fire.
+# Top-level route is the catch-all; child routes match on labels.
+route:
+  receiver: webhook-default          # default destination for all alerts
+  group_by: [alertname, severity]    # bundle alerts of same name+severity
+  group_wait: 30s                    # wait this long before sending first batch
+  group_interval: 5m                 # wait between batches for the same group
+  repeat_interval: 4h                # how often to re-send unresolved alerts
+
+  # Sub-routes: critical alerts get sent immediately to a separate channel
+  routes:
+    - matchers:
+        - severity = critical
+      receiver: webhook-critical
+      group_wait: 0s                 # critical = no batching delay
+      continue: false
+
+# Inhibition: if a critical alert fires, suppress lower-severity alerts
+# from the same service to avoid notification spam.
+inhibit_rules:
+  - source_matchers:
+      - severity = critical
+    target_matchers:
+      - severity = warning
+    equal: [service]
+
+# Receivers: where alerts actually go.
+# In production these would be Slack/PagerDuty/email; we use a webhook
+# stub that prints incoming JSON to stdout for the demo.
+receivers:
+  - name: webhook-default
+    webhook_configs:
+      - url: http://webhook-logger:8080/alerts
+        send_resolved: true
+
+  - name: webhook-critical
+    webhook_configs:
+      - url: http://webhook-logger:8080/critical
+        send_resolved: true

@@ -151,6 +151,34 @@ services:
     depends_on:
       - prometheus
     restart: unless-stopped
+  
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: football-alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager:/etc/alertmanager
+      - alertmanager-data:/alertmanager
+    networks:
+      - football-net
+    depends_on:
+      - webhook-logger
+    restart: unless-stopped
+
+  webhook-logger:
+    build:
+      context: ./webhook_logger
+      dockerfile: Dockerfile
+    image: football-webhook-logger:latest
+    container_name: football-webhook-logger
+    networks:
+      - football-net
+    restart: unless-stopped
 
   postgres:
     image: postgres:16
@@ -220,3 +248,4 @@ volumes:
   postgres-db-volume:
   prometheus-data:
   grafana-data:
+  alertmanager-data:
