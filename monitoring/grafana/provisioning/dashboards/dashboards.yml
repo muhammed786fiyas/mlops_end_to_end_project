@@ -1,0 +1,12 @@
+# Auto-load any dashboard JSON files placed in /var/lib/grafana/dashboards/
+apiVersion: 1
+
+providers:
+  - name: football-mlops
+    orgId: 1
+    folder: Football MLOps
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
