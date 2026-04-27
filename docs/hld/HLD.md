@@ -53,6 +53,7 @@ The system explicitly addresses each concern — see Section 7 (Quality Attribut
 ### 3.1 Context diagram
 
 ```mermaid
+%%{init: {'theme':'neutral'}}%%
 flowchart LR
     user["End User<br/>(Browser)"]
     grader["Academic Grader<br/>(viva, demo)"]
@@ -60,7 +61,7 @@ flowchart LR
     dataset["Kaggle European<br/>Soccer Database<br/>(SQLite, 8 seasons)"]
     github["GitHub<br/>(code + DVC pointers)"]
 
-    system(["Football MLOps System<br/>(11 Docker containers)"])
+    system(["Football MLOps System<br/>(11 Docker containers)"]):::core
 
     user -->|"HTTP /predict<br/>via frontend"| system
     grader -->|"docker compose up<br/>+ browse UIs"| system
@@ -68,11 +69,8 @@ flowchart LR
     github -->|"git clone<br/>dvc pull"| system
     dataset -->|"one-time<br/>kaggle download"| system
 
-    style system fill:#1e3a8a,stroke:#2563eb,color:#fff
-    style user fill:#fef3c7
-    style grader fill:#fef3c7
-    style devops fill:#fef3c7
-```
+    classDef core fill:#1e3a8a,stroke:#0f172a,stroke-width:2px,color:#ffffff
+```     
 
 ### 3.2 External interfaces
 
@@ -103,6 +101,7 @@ All services communicate via HTTP over a shared Docker bridge network (`football
 ### 4.2 Container diagram (C4 Level 2)
 
 ```mermaid
+%%{init: {'theme':'neutral'}}%%
 flowchart TB
     subgraph serving["Serving Tier"]
         frontend["frontend<br/>(Nginx)<br/>:8080"]
@@ -131,7 +130,7 @@ flowchart TB
     frontend -->|"REST /predict"| backend
     backend -->|"models:/<br/>fetch latest"| mlflow
     backend -->|read history| sqlite
-    backend -->|"GET /metrics<br/>scrape every 15s"| prom
+    prom -.->|"scrape /metrics<br/>every 15s"| backend
 
     scheduler -->|"runs DVC<br/>repro train"| backend
     scheduler -.->|store DAG state| postgres
@@ -141,12 +140,7 @@ flowchart TB
 
     prom -->|fires alerts| am
     am -->|webhook POST| whlog
-    grafana -->|"PromQL<br/>queries"| prom
-
-    style serving fill:#dbeafe,stroke:#1e40af
-    style platform fill:#fef3c7,stroke:#92400e
-    style observability fill:#dcfce7,stroke:#166534
-    style user fill:#f3e8ff
+    prom -->|PromQL| grafana
 ```
 
 ### 4.3 Service responsibilities
@@ -235,6 +229,7 @@ The codebase uses `FileNotFoundError`, `ValueError`, `RuntimeError`, and FastAPI
 The path a single `/predict` call takes through the system, including observability side-effects.
 
 ```mermaid
+%%{init: {'theme':'default'}}%%
 sequenceDiagram
     autonumber
     actor User
