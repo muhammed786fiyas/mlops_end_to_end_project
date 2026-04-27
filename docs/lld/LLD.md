@@ -408,17 +408,18 @@ default_args = {
 
 ```mermaid
 flowchart LR
-    A[data_sensor<br/>FileSensor]
-    B[validate_data<br/>@task]
-    C[build_features<br/>BashOperator]
-    D[train_model<br/>BashOperator]
-    E[check_metrics<br/>@task]
-    F[dry_pipeline_alert<br/>@task<br/>trigger_rule=one_failed]
+    A["data_sensor<br/>FileSensor"]
+    B["validate_data<br/>@task"]
+    C["build_features<br/>BashOperator"]
+    D["train_model<br/>BashOperator"]
+    E["check_metrics<br/>@task"]
+    F["dry_pipeline_alert<br/>@task<br/>trigger_rule=one_failed"]
 
     A --> B --> C --> D --> E
     A -.->|sensor times out| F
-    classDef happy fill:#dcfce7,stroke:#166534
-    classDef alert fill:#fee2e2,stroke:#dc2626
+
+    classDef happy fill:#dcfce7,stroke:#166534,color:#000
+    classDef alert fill:#fee2e2,stroke:#dc2626,color:#000
     class A,B,C,D,E happy
     class F alert
 ```
