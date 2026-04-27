@@ -21,3 +21,6 @@ mlflow>=2.18.0
 
 # DVC
 dvc>=3.50.0
+
+# Prometheus client for monitoring
+prometheus-client>=0.20.0

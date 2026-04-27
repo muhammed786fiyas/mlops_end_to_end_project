@@ -1,0 +1,45 @@
+# Prometheus configuration for football-mlops project.
+#
+# Scrapes:
+#   - backend (FastAPI /metrics) every 15s
+#   - prometheus's own metrics (free, useful for self-monitoring)
+#
+# Alert rules are loaded from rules/*.yml (created in M5.4).
+
+global:
+  scrape_interval: 15s        # how often to pull metrics from each target
+  evaluation_interval: 15s    # how often to evaluate alert rules
+  external_labels:
+    cluster: football-mlops
+    environment: dev
+
+# Load alert rules from this directory (we'll add them in M5.4)
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+# Alertmanager wiring (we'll add the alertmanager service in M5.4;
+# Prometheus tolerates an unreachable Alertmanager — it just queues alerts)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+scrape_configs:
+  # ---- Self-monitoring ----
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - localhost:9090
+
+  # ---- Football backend ----
+  # The backend exposes /metrics on port 8000 inside the docker network.
+  # 'backend' resolves via Docker's DNS to the backend container.
+  - job_name: football-backend
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - backend:8000
+        labels:
+          service: backend
+          component: api

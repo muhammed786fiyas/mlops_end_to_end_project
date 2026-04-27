@@ -109,6 +109,27 @@ services:
       - backend
     networks:
       - football-net
+  
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: football-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus
+      - prometheus-data:/prometheus
+    networks:
+      - football-net
+    depends_on:
+      - backend
+    restart: unless-stopped
 
   postgres:
     image: postgres:16
@@ -176,3 +197,4 @@ networks:
 
 volumes:
   postgres-db-volume:
+  prometheus-data:

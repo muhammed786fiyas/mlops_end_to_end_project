@@ -2,8 +2,8 @@
 FastAPI backend for the football match outcome prediction service.
 
 Loads the trained LightGBM model from the MLflow Model Registry (with local 
-pickle fallback) and the FeatureService at startup, then exposes three 
-endpoints: /health, /teams, /predict.
+pickle fallback) and the FeatureService at startup, then exposes four 
+endpoints: /health, /teams, /predict, /metrics.
 
 Run locally:
     uvicorn src.api.main:app --reload --port 8000
@@ -24,8 +24,9 @@ import joblib
 import mlflow
 import mlflow.lightgbm
 import yaml
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_client import Counter, Gauge, Histogram, generate_latest, CONTENT_TYPE_LATEST
 from pydantic import BaseModel, Field
 
 from src.api.feature_service import FeatureService
@@ -68,6 +69,51 @@ OUTCOME_TO_LABEL = {'H': 'Home Win', 'D': 'Draw', 'A': 'Away Win'}
 
 
 # ---------------------------------------------------------------------------
+# Prometheus metrics
+# ---------------------------------------------------------------------------
+# 1. Counter: total predictions, labeled by predicted class.
+#    Lets us answer "How many predictions of each class have we made?"
+PREDICTIONS_TOTAL = Counter(
+    "football_predictions_total",
+    "Total number of match outcome predictions served",
+    ["predicted_class"],
+)
+
+# 2. Counter: total errors, labeled by HTTP status code.
+#    Lets us alert on error rate.
+PREDICTION_ERRORS_TOTAL = Counter(
+    "football_prediction_errors_total",
+    "Total number of failed prediction requests",
+    ["status_code"],
+)
+
+# 3. Histogram: prediction latency in seconds.
+#    Buckets tuned for sub-second ML inference.
+#    Gives us p50, p95, p99 via histogram_quantile() in PromQL.
+PREDICTION_LATENCY_SECONDS = Histogram(
+    "football_prediction_latency_seconds",
+    "End-to-end prediction latency (feature build + model inference)",
+    buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0),
+)
+
+# 4. Gauge: model info. Always set to 1; the labels carry the data.
+#    Common Prometheus pattern: "info" gauge whose only purpose is its labels.
+MODEL_INFO = Gauge(
+    "football_model_info",
+    "Currently loaded model metadata (always 1; see labels)",
+    ["version", "source"],
+)
+
+# 5. Counter: model load events, labeled by source (mlflow / local fallback).
+#    Lets us alert if the registry-load path stops working in production.
+MODEL_LOAD_TOTAL = Counter(
+    "football_model_load_total",
+    "Number of times the model was loaded at startup, by source",
+    ["source"],
+)
+
+
+# ---------------------------------------------------------------------------
 # Application state — populated at startup
 # ---------------------------------------------------------------------------
 
@@ -101,6 +147,8 @@ async def lifespan(app: FastAPI):
         state.model = mlflow.lightgbm.load_model(model_uri)
         state.model_version = f"mlflow:{MLFLOW_REGISTERED_MODEL_NAME}@{MLFLOW_MODEL_STAGE}"
         logger.info(f"Loaded model from MLflow registry")
+        MODEL_LOAD_TOTAL.labels(source="mlflow").inc()
+        MODEL_INFO.labels(version=state.model_version, source="mlflow").set(1)
     except Exception as e:
         logger.warning(f"MLflow load failed ({type(e).__name__}: {e})")
         logger.warning(f"Falling back to local pickle: {MODEL_PATH}")
@@ -114,6 +162,8 @@ async def lifespan(app: FastAPI):
         else:
             state.model_version = "local-unknown"
         logger.info(f"Loaded model from local pickle")
+        MODEL_LOAD_TOTAL.labels(source="local").inc()
+        MODEL_INFO.labels(version=state.model_version, source="local").set(1)
     logger.info(f"Model version: {state.model_version}")
 
     # Load feature service
@@ -230,10 +280,13 @@ def predict(request: PredictRequest):
 
     # Validate team IDs
     if not state.feature_service.team_exists(request.home_team_id):
+        PREDICTION_ERRORS_TOTAL.labels(status_code="400").inc()
         raise HTTPException(status_code=400, detail=f"Unknown home_team_id: {request.home_team_id}")
     if not state.feature_service.team_exists(request.away_team_id):
+        PREDICTION_ERRORS_TOTAL.labels(status_code="400").inc()
         raise HTTPException(status_code=400, detail=f"Unknown away_team_id: {request.away_team_id}")
     if request.home_team_id == request.away_team_id:
+        PREDICTION_ERRORS_TOTAL.labels(status_code="400").inc()
         raise HTTPException(status_code=400, detail="home_team_id and away_team_id must differ")
 
     # Default date to today
@@ -251,13 +304,19 @@ def predict(request: PredictRequest):
         proba = state.model.predict_proba(features)[0]
     except Exception as e:
         logger.exception("Prediction failed")
+        PREDICTION_ERRORS_TOTAL.labels(status_code="500").inc()
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
-    latency_ms = int((time.perf_counter() - start) * 1000)
+    latency_seconds = time.perf_counter() - start
+    latency_ms = int(latency_seconds * 1000)
 
     # Decode prediction
     predicted_class = int(proba.argmax())
     predicted_outcome = INT_TO_OUTCOME[predicted_class]
     probabilities = {INT_TO_OUTCOME[i]: float(proba[i]) for i in range(3)}
+
+    # --- Record Prometheus metrics ---
+    PREDICTION_LATENCY_SECONDS.observe(latency_seconds)
+    PREDICTIONS_TOTAL.labels(predicted_class=predicted_outcome).inc()
 
     home_name = state.feature_service.get_team_name(request.home_team_id)
     away_name = state.feature_service.get_team_name(request.away_team_id)
@@ -279,6 +338,16 @@ def predict(request: PredictRequest):
         model_version=state.model_version,
         inference_latency_ms=latency_ms,
     )
+
+
+@app.get("/metrics", tags=["meta"], include_in_schema=False)
+def metrics():
+    """Expose Prometheus metrics in text format for scraping.
+
+    Prometheus polls this endpoint on its scrape interval (default 15s)
+    and stores the time-series data in its internal TSDB.
+    """
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 # ---------------------------------------------------------------------------
