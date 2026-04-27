@@ -48,18 +48,51 @@ default_args = {
 
 @task
 def validate_data(trigger_file: str) -> dict:
-    """Sanity-check the project state before training."""
+    """Sanity-check the project state before training.
+
+    Performs three checks:
+    1. Trigger file exists (set by upstream data pipeline)
+    2. Trigger file is recent (< 24 hours old) — stale triggers
+       suggest the upstream pipeline failed to refresh
+    3. Raw database is present and non-empty (>1MB sanity check
+       against partial/corrupted downloads)
+
+    Returns metadata for downstream tasks via XCom.
+    """
     import os
+    import time
+
+    # Check 1: trigger file presence (sensor already did this, but defensive)
     if not os.path.isfile(trigger_file):
         raise FileNotFoundError(f"Trigger file not found: {trigger_file}")
+
+    # Check 2: trigger file freshness
+    trigger_age_seconds = time.time() - os.path.getmtime(trigger_file)
+    trigger_age_hours = trigger_age_seconds / 3600
+    if trigger_age_hours > 24:
+        raise ValueError(
+            f"Trigger file is {trigger_age_hours:.1f}h old (max 24h). "
+            f"Upstream data pipeline may have failed to refresh."
+        )
+    print(f"Trigger file age: {trigger_age_hours:.2f}h (within 24h window)")
+
+    # Check 3: raw data presence and size
     raw_db = Path(PROJECT_ROOT) / "data" / "raw" / "database.sqlite"
     if not raw_db.exists():
         raise FileNotFoundError(f"Raw database missing: {raw_db}")
-    size_mb = raw_db.stat().st_size / (1024 * 1024)
+
+    size_bytes = raw_db.stat().st_size
+    size_mb = size_bytes / (1024 * 1024)
+    if size_bytes < 1_000_000:  # less than 1MB suggests partial download
+        raise ValueError(
+            f"Raw database suspiciously small: {size_mb:.2f}MB. "
+            f"Expected at least 1MB. Possible corrupt download."
+        )
     print(f"Raw DB OK: {raw_db} ({size_mb:.1f} MB)")
-    print(f"Trigger file OK: {trigger_file}")
+
     return {
         "raw_db_size_mb": round(size_mb, 1),
+        "trigger_age_hours": round(trigger_age_hours, 2),
         "validated_at": datetime.utcnow().isoformat(),
     }
 
