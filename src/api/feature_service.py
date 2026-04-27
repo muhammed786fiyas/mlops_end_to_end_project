@@ -39,6 +39,17 @@ class FeatureService:
     """
 
     def __init__(self, db_path: Path, team_lookup_path: Path):
+        if not Path(db_path).exists():
+            raise FileNotFoundError(
+                f"SQLite database not found at {db_path}. "
+                f"Run `dvc pull` or `python -m src.features.build_features` first."
+            )
+        if not Path(team_lookup_path).exists():
+            raise FileNotFoundError(
+                f"Team lookup CSV not found at {team_lookup_path}. "
+                f"Run `python -m src.features.build_features` first."
+            )
+
         self.db_path = db_path
         self.conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self.team_lookup = pd.read_csv(team_lookup_path)

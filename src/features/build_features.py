@@ -52,6 +52,12 @@ FIFA_NUMERIC_COLS = [
 def load_raw_data(db_path: Path) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Load match, team, and team-attribute data from SQLite."""
     logger.info(f"Loading raw data from {db_path}")
+    if not Path(db_path).exists():
+        raise FileNotFoundError(
+            f"SQLite database not found at {db_path}. "
+            f"Run `dvc pull` to fetch the raw data, or check config.yaml's data.raw_db path."
+        )
+
     conn = sqlite3.connect(db_path)
 
     matches_query = """
