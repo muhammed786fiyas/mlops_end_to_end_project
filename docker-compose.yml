@@ -85,6 +85,7 @@ services:
       - ./logs:/app/logs
       - ./data/processed:/app/data/processed
       - ./models:/app/models
+      - ./mlflow_artifacts:/mlflow/mlflow_artifacts
     depends_on:
       - mlflow
     healthcheck:

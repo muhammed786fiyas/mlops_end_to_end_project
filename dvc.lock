@@ -96,7 +96,7 @@ stages:
       size: 103544
     - path: models/lightgbm_baseline.pkl
       hash: md5
-      md5: 9d5d5c0be769cc37d3b58a33e6ac5ff0
+      md5: 6c61aa68b6815f0e4ec16dac8d8816c4
       size: 711964
     - path: models/metrics.json
       hash: md5
@@ -104,5 +104,5 @@ stages:
       size: 1366
     - path: models/training_metadata.json
       hash: md5
-      md5: 9fdae9c96b77e57a7f9a689d28f3b198
+      md5: 4992b0a313bece59974eac1e0f49cb4b
       size: 1657
