@@ -229,7 +229,6 @@ The codebase uses `FileNotFoundError`, `ValueError`, `RuntimeError`, and FastAPI
 The path a single `/predict` call takes through the system, including observability side-effects.
 
 ```mermaid
-%%{init: {'theme':'default'}}%%
 sequenceDiagram
     autonumber
     actor User
