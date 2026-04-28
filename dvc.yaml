@@ -22,6 +22,7 @@ stages:
       - data/processed/train.csv
       - data/processed/test.csv
       - data/processed/team_lookup.csv
+      - data/processed/team_elos.csv
       - data/production/season_2015_16.csv
 
   train:

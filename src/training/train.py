@@ -62,6 +62,8 @@ FEATURE_COLUMNS = [
     'away_buildUpPlaySpeed', 'away_buildUpPlayDribbling', 'away_buildUpPlayPassing',
     'away_chanceCreationPassing', 'away_chanceCreationCrossing', 'away_chanceCreationShooting',
     'away_defencePressure', 'away_defenceAggression', 'away_defenceTeamWidth',
+    # ELO (3) — Day 7 experiment
+    'home_elo', 'away_elo', 'elo_diff',
 ]
 TARGET_COLUMN = 'outcome_encoded'
 TARGET_NAMES = ['H', 'D', 'A']

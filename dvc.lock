@@ -9,8 +9,8 @@ stages:
       size: 313090048
     - path: src/features/build_features.py
       hash: md5
-      md5: 827fc3c3462436db90d7ab19b107cac1
-      size: 17500
+      md5: f1f7fbbfef31c85b2ec027a547e8b525
+      size: 20446
     - path: src/utils/logger.py
       hash: md5
       md5: da79a8b06744206d7f95a3117878ecab
@@ -31,37 +31,41 @@ stages:
         - 2012/2013
         - 2013/2014
     outs:
+    - path: data/processed/team_elos.csv
+      hash: md5
+      md5: 991fcd4582dfa0f307059557319c668f
+      size: 7171
     - path: data/processed/team_lookup.csv
       hash: md5
       md5: 13905ac354d8a07ced00c4bf9d27f34a
       size: 6879
     - path: data/processed/test.csv
       hash: md5
-      md5: 6177144055bc4b790b9fffeae71b850d
-      size: 706765
+      md5: be4d37bc36614f0c1b4c0e583e3380a1
+      size: 891099
     - path: data/processed/train.csv
       hash: md5
-      md5: afd908c294745b86bb2676417ee51abf
-      size: 5357644
+      md5: 7b08506a92c6c463d62521aff15163d8
+      size: 6391624
     - path: data/production/season_2015_16.csv
       hash: md5
-      md5: eda2cdcada436c4b086a5331015c88c3
-      size: 686044
+      md5: 12cab36f0d216ad1552495ea2e6cb356
+      size: 869824
   train:
     cmd: python -m src.training.train
     deps:
     - path: data/processed/test.csv
       hash: md5
-      md5: 6177144055bc4b790b9fffeae71b850d
-      size: 706765
+      md5: be4d37bc36614f0c1b4c0e583e3380a1
+      size: 891099
     - path: data/processed/train.csv
       hash: md5
-      md5: afd908c294745b86bb2676417ee51abf
-      size: 5357644
+      md5: 7b08506a92c6c463d62521aff15163d8
+      size: 6391624
     - path: src/training/train.py
       hash: md5
-      md5: 82e4f87b79824dea974bd4bb906acf45
-      size: 14262
+      md5: 6b20a04dcbfcc202090ac8676411cdea
+      size: 14337
     - path: src/utils/logger.py
       hash: md5
       md5: da79a8b06744206d7f95a3117878ecab
@@ -92,17 +96,17 @@ stages:
     outs:
     - path: models/feature_importance.png
       hash: md5
-      md5: 82a2b0b5bd9868ef5678abf8916d9a22
-      size: 103544
+      md5: cf94885c69fcbaa7c1381742ec8aca53
+      size: 107031
     - path: models/lightgbm_baseline.pkl
       hash: md5
-      md5: 6c61aa68b6815f0e4ec16dac8d8816c4
-      size: 711964
+      md5: 78d1812b48b7dc92e8acbd0150a6e1df
+      size: 609452
     - path: models/metrics.json
       hash: md5
-      md5: cef0106286f2b7eeef0e689dd6122f09
-      size: 1366
+      md5: 5b79b143590adb5a56feaa3687d78eba
+      size: 1364
     - path: models/training_metadata.json
       hash: md5
-      md5: 4992b0a313bece59974eac1e0f49cb4b
-      size: 1657
+      md5: 846e521c974e15874a53e3e91e75020e
+      size: 1705

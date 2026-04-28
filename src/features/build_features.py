@@ -307,6 +307,66 @@ def attach_fifa_features(matches: pd.DataFrame, team_attrs: pd.DataFrame) -> pd.
     logger.info(f"  Added {len(fifa_feature_cols)} FIFA features")
     return matches
 
+# ---------------------------------------------------------------------------
+# ELO ratings
+# ---------------------------------------------------------------------------
+
+ELO_INITIAL = 1500
+ELO_K_FACTOR = 20         # FIFA standard
+ELO_HOME_ADVANTAGE = 60   # well-known empirical value for football
+
+
+def compute_elo_ratings(matches: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """
+    Walk through matches chronologically, updating ELO ratings.
+    Adds home_elo, away_elo, elo_diff as PRE-match ratings (no leakage).
+    Returns (matches_with_elo, final_team_elos).
+    """
+    logger.info("Computing ELO ratings (Day 7 experiment)")
+
+    matches = matches.sort_values('date').reset_index(drop=True).copy()
+    elos: dict[int, float] = {}
+
+    home_elo_col = []
+    away_elo_col = []
+
+    for _, row in matches.iterrows():
+        home_id = row['home_team_api_id']
+        away_id = row['away_team_api_id']
+
+        home_elo = elos.get(home_id, ELO_INITIAL)
+        away_elo = elos.get(away_id, ELO_INITIAL)
+
+        # Record PRE-match ratings (this is what the model sees — no leakage)
+        home_elo_col.append(home_elo)
+        away_elo_col.append(away_elo)
+
+        # Compute expected outcome with home advantage
+        adjusted_home = home_elo + ELO_HOME_ADVANTAGE
+        expected_home = 1 / (1 + 10 ** ((away_elo - adjusted_home) / 400))
+        expected_away = 1 - expected_home
+
+        # Actual outcome (1.0 win, 0.5 draw, 0.0 loss)
+        if row['home_team_goal'] > row['away_team_goal']:
+            actual_home, actual_away = 1.0, 0.0
+        elif row['home_team_goal'] < row['away_team_goal']:
+            actual_home, actual_away = 0.0, 1.0
+        else:
+            actual_home, actual_away = 0.5, 0.5
+
+        # Update ratings AFTER recording features
+        elos[home_id] = home_elo + ELO_K_FACTOR * (actual_home - expected_home)
+        elos[away_id] = away_elo + ELO_K_FACTOR * (actual_away - expected_away)
+
+    matches['home_elo'] = home_elo_col
+    matches['away_elo'] = away_elo_col
+    matches['elo_diff'] = matches['home_elo'] - matches['away_elo']
+
+    if elos:
+        logger.info(f"  ELO range: [{min(elos.values()):.0f}, {max(elos.values()):.0f}]")
+    logger.info(f"  Tracked {len(elos)} teams")
+    return matches, elos
+
 
 def chronological_split(
     matches: pd.DataFrame,
@@ -386,6 +446,7 @@ def main(rolling_window: Optional[int] = None, h2h_window: Optional[int] = None)
     matches = compute_rolling_form(matches, window=rw)
     matches = compute_head_to_head(matches, window=h2hw)
     matches = attach_fifa_features(matches, team_attrs)
+    matches, final_elos = compute_elo_ratings(matches)
 
     train_df, test_df, production_df = chronological_split(
         matches,
@@ -407,6 +468,15 @@ def main(rolling_window: Optional[int] = None, h2h_window: Optional[int] = None)
     teams_clean = teams[['team_api_id', 'team_long_name', 'team_short_name']].copy()
     teams_clean = teams_clean.dropna(subset=['team_long_name']).sort_values('team_long_name')
     teams_clean.to_csv(team_lookup_path, index=False)
+
+    # Save final ELO ratings for runtime serving (Day 7 experiment)
+    team_elos_path = processed_dir / "team_elos.csv"
+    team_elos_df = pd.DataFrame([
+        {'team_api_id': tid, 'elo': rating}
+        for tid, rating in final_elos.items()
+    ])
+    team_elos_df.to_csv(team_elos_path, index=False)
+    logger.info(f"Saved team ELOs:      {team_elos_path} ({len(team_elos_df):,} teams)")
 
     logger.info(f"Saved train CSV:      {train_path} ({len(train_df):,} rows)")
     logger.info(f"Saved test CSV:       {test_path} ({len(test_df):,} rows)")
