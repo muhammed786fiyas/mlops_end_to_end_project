@@ -120,11 +120,13 @@ flowchart TB
         grafana["grafana<br/>:3000"]
         am["alertmanager<br/>:9093"]
         whlog["webhook-logger<br/>(receiver stub)"]
+        mailtrap["mailtrap-relay<br/>(Flask, :5001)<br/>Day 7"]
     end
 
     user(["User<br/>browser"])
     sqlite[("SQLite<br/>raw data")]
     artifacts[("MLflow<br/>artifacts<br/>(host volume)")]
+    email(["MailTrap<br/>sandbox<br/>inbox"])
 
     user -->|HTTP| frontend
     frontend -->|"REST /predict"| backend
@@ -132,7 +134,7 @@ flowchart TB
     backend -->|read history| sqlite
     prom -.->|"scrape /metrics<br/>every 15s"| backend
 
-    scheduler -->|"runs DVC<br/>repro train"| backend
+    scheduler -->|"runs DVC<br/>(2 DAGs: weekly train +<br/>daily drift check)"| backend
     scheduler -.->|store DAG state| postgres
     webserver -.->|read state| postgres
     scheduler -->|"log run<br/>register model"| mlflow
@@ -140,6 +142,8 @@ flowchart TB
 
     prom -->|fires alerts| am
     am -->|webhook POST| whlog
+    am -->|"webhook<br/>(critical only)"| mailtrap
+    mailtrap -->|REST API| email
     prom -->|PromQL| grafana
 ```
 
@@ -147,7 +151,7 @@ flowchart TB
 
 | Service | Responsibility | Key technology |
 |---|---|---|
-| **frontend** | Serve static HTML/CSS/JS for the prediction UI | Nginx alpine |
+| **frontend** | Serve static HTML/CSS/JS for the prediction UI (`/`) and operations console landing page (`/dashboard.html`, links out to all 8 system UIs) | Nginx alpine |
 | **backend** | Inference API; loads model at startup; computes live features; exposes `/metrics` | FastAPI + LightGBM + prometheus-client |
 | **mlflow** | Experiment tracking server + model registry | MLflow 3.x |
 | **airflow-scheduler** | Executes DAGs on schedule; runs DVC stages | Airflow 3.1 LocalExecutor |
@@ -155,12 +159,13 @@ flowchart TB
 | **postgres** | Airflow metadata DB (DAG runs, task instances, connections) | Postgres 16 |
 | **prometheus** | Scrapes `/metrics` from backend; stores time-series; evaluates alert rules | Prometheus 2.55 |
 | **grafana** | Renders dashboards by querying Prometheus | Grafana 11.3 |
-| **alertmanager** | Receives alerts from Prometheus; groups, routes, deduplicates | AlertManager 0.27 |
+| **alertmanager** | Receives alerts from Prometheus; groups, routes, deduplicates; fans out critical alerts to webhook + email | AlertManager 0.27 |
+| **mailtrap-relay** | Receives AlertManager webhooks for critical alerts and forwards them as emails via MailTrap REST API (Day 7) | Flask + gunicorn |
 | **webhook-logger** | Receives webhook POSTs and pretty-prints alert payloads (stand-in for Slack/PagerDuty) | FastAPI |
 
 ### 4.4 Why this many services
 
-Eleven services seems heavy for a one-week project. The choice is deliberate: **each service maps to a distinct rubric concern**, and combining services would conflate responsibilities that are intentionally separated in real production stacks.
+Twelve services seems heavy for a one-week project. The choice is deliberate: **each service maps to a distinct rubric concern**, and combining services would conflate responsibilities that are intentionally separated in real production stacks.
 
 We *could* have:
 
@@ -328,6 +333,20 @@ Three layers of observability:
 - The model contract test (`test_feature_columns_match_train_contract`) prevents the highest-impact silent bug — train/serve feature mismatch
 
 ---
+
+### 7.7 Production drift evaluation
+
+A standalone evaluation module `src/evaluation/evaluate_production.py` measures how the canonical model performs on the held-out production dataset (`data/production/season_2015_16.csv`, 3,262 matches from the 2015/2016 season — never seen during training or test). The script logs results to MLflow as a `production-drift-check` run and computes drift delta vs canonical test metrics, classifying severity using 5 bands tuned for this domain:
+
+| Drift band | Threshold (F1 delta vs test) | Action |
+|---|---|---|
+| **IMPROVED** | ≥ +0.02 | Investigate (unusual) |
+| **STABLE** | −0.01 to +0.02 | None — within typical inter-season variance |
+| **MILD DRIFT** | −0.03 to −0.01 | Monitor over next 2 seasons |
+| **DRIFT** | −0.05 to −0.03 | Schedule retraining within 30 days |
+| **SEVERE DRIFT** | < −0.05 | Retrain immediately |
+
+The script uses the same A2 graceful-degradation pattern as the FastAPI backend on startup: try MLflow registry first, fall back to local pickle if the registry is unreachable. Currently invoked manually; future work is to schedule this evaluation alongside the weekly retrain DAG so production drift is continuously measured.
 
 ## 8. Risks & Assumptions
 

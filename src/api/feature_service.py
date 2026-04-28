@@ -53,7 +53,17 @@ class FeatureService:
         self.db_path = db_path
         self.conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self.team_lookup = pd.read_csv(team_lookup_path)
-        
+
+        # Load ELO ratings (Day 7 experiment)
+        team_elos_path = team_lookup_path.parent / "team_elos.csv"
+        if team_elos_path.exists():
+            team_elos_df = pd.read_csv(team_elos_path)
+            self._team_elos = dict(zip(team_elos_df['team_api_id'], team_elos_df['elo']))
+            logger.info(f"FeatureService loaded ELO ratings for {len(self._team_elos)} teams")
+        else:
+            logger.warning(f"team_elos.csv not found at {team_elos_path}; using ELO=1500 default")
+            self._team_elos = {}
+
         # Compute FIFA column means for imputation (same approach as training)
         # We do this once at startup to match the train-time imputation
         self._fifa_means = self._compute_fifa_means()
@@ -92,8 +102,8 @@ class FeatureService:
         self, home_team_id: int, away_team_id: int, match_date: datetime
     ) -> pd.DataFrame:
         """
-        Build the 32-feature vector for a single match.
-        
+        Build the 35-feature vector for a single match.
+
         Returns a DataFrame with one row, matching the column order the model expects.
         """
         logger.info(f"Building features for home={home_team_id}, away={away_team_id}, date={match_date.date()}")
@@ -119,6 +129,13 @@ class FeatureService:
             features[f'home_{k}'] = v
         for k, v in away_fifa.items():
             features[f'away_{k}'] = v
+        
+        # 4. ELO ratings (Day 7 experiment)
+        home_elo = float(self._team_elos.get(home_team_id, 1500.0))
+        away_elo = float(self._team_elos.get(away_team_id, 1500.0))
+        features['home_elo'] = home_elo
+        features['away_elo'] = away_elo
+        features['elo_diff'] = home_elo - away_elo
 
         # Return as single-row DataFrame in the exact column order the model expects
         return pd.DataFrame([features])[self._expected_columns()]
@@ -268,4 +285,6 @@ class FeatureService:
             'away_buildUpPlaySpeed', 'away_buildUpPlayDribbling', 'away_buildUpPlayPassing',
             'away_chanceCreationPassing', 'away_chanceCreationCrossing', 'away_chanceCreationShooting',
             'away_defencePressure', 'away_defenceAggression', 'away_defenceTeamWidth',
+            # ELO (3) — Day 7 experiment
+            'home_elo', 'away_elo', 'elo_diff',
         ]

@@ -28,7 +28,9 @@ mlops_end_to_end_project/
 ├── requirements.txt         # pip pin for Docker layers
 ├── dvc.yaml                 # DVC pipeline DAG (build_features → train)
 ├── dvc.lock                 # DVC pipeline state (content hashes)
-├── docker-compose.yml       # 11-container stack definition
+├── docker-compose.yml       # 12-container stack definition (Day 7: +mailtrap-relay)
+├── run_training.sh          # canonical training wrapper for `mlflow run .`
+├── .env.example             # template for SMTP creds (real .env is gitignored)
 ├── MLproject                # MLflow entry point declaration
 │
 ├── src/                     # all Python source code
@@ -38,7 +40,10 @@ mlops_end_to_end_project/
 │   ├── features/
 │   │   └── build_features.py        # batch feature engineering (DVC stage)
 │   ├── training/
-│   │   └── train.py                 # LightGBM training + MLflow logging (DVC stage)
+│   │   ├── train.py                 # LightGBM training + MLflow logging (DVC stage)
+│   │   └── train_xgboost.py         # XGBoost comparison experiment (DVC stage, Day 7)
+│   ├── evaluation/                  # Day 7 — production drift evaluation
+│   │   └── evaluate_production.py   # measures F1 drift on unseen 2015/16 season
 │   └── utils/
 │       └── logger.py                # rotating-file logger factory
 │
@@ -48,14 +53,20 @@ mlops_end_to_end_project/
 │   ├── production/                  # season_2015_16.csv (drift simulation)
 │   └── triggers/                    # FileSensor target dir
 │
-├── models/                  # DVC-tracked
-│   ├── lightgbm_baseline.pkl        # current best model (also in MLflow registry)
-│   ├── metrics.json                 # train/val/test F1, ROC-AUC, accuracy
+├── models/                  # DVC-tracked (with .gitignore for binaries)
+│   ├── lightgbm_baseline.pkl        # canonical model (also in MLflow registry as v17)
+│   ├── metrics.json                 # train/val/test F1, ROC-AUC, accuracy (cache:false)
 │   ├── training_metadata.json       # git_hash, params, dates
-│   └── feature_importance.png       # plot
+│   ├── feature_importance.png       # LightGBM plot
+│   ├── xgboost_experiment.pkl       # Day 7 comparison run (NOT registered)
+│   ├── xgboost_metrics.json         # Day 7 (cache:false)
+│   ├── xgboost_feature_importance.png
+│   └── production_drift_report.json # Day 7 drift evaluation output
 │
 ├── frontend/                # not Python — vanilla static UI
-│   ├── templates/index.html
+│   ├── templates/
+│   │   ├── index.html               # prediction UI
+│   │   └── dashboard.html           # operations console (Day 7)
 │   └── static/{app.js, style.css}
 │
 ├── docker/                  # Dockerfiles
@@ -65,14 +76,20 @@ mlops_end_to_end_project/
 │   └── nginx.conf
 │
 ├── airflow/
-│   ├── dags/football_training_dag.py
+│   ├── dags/
+│   │   ├── football_training_dag.py        # weekly training pipeline (FileSensor + DVC + quality gate)
+│   │   └── football_drift_check_dag.py     # daily drift evaluation (Day 7)
 │   └── config/simple_auth_manager_passwords.json.generated
 │
 ├── monitoring/              # observability stack configs
 │   ├── prometheus/
 │   │   ├── prometheus.yml
 │   │   └── rules/football_alerts.yml
-│   ├── alertmanager/alertmanager.yml
+│   ├── alertmanager/
+│   │   ├── alertmanager.yml         # routes alerts to webhook + email receivers
+│   │   ├── mailtrap_relay.py        # Day 7 — Flask service that forwards alerts to MailTrap REST API
+│   │   ├── Dockerfile.relay         # builds the mailtrap-relay container
+│   │   └── requirements.txt         # flask, requests, gunicorn
 │   └── grafana/
 │       ├── provisioning/{datasources,dashboards}/*.yml
 │       └── dashboards/football-overview.json
@@ -88,12 +105,18 @@ mlops_end_to_end_project/
 │   ├── test_feature_service.py
 │   └── test_build_features.py
 │
-└── docs/                    # all design documentation
-    ├── hld/HLD.md
-    ├── lld/{LLD.md, api_endpoints.md}
-    ├── test_plan/TEST_PLAN.md
-    ├── user_manual/USER_MANUAL.md
-    └── daily_log/day_NN.md
+├── docs/                    # all design documentation
+│   ├── hld/HLD.md
+│   ├── lld/{LLD.md, api_endpoints.md}
+│   ├── test_plan/TEST_PLAN.md
+│   ├── user_manual/USER_MANUAL.md
+│   └── daily_log/day_NN.md
+│
+├── demo/                    # 5-minute project demo video (Day 7)
+│   └── .gitkeep
+│
+└── report/                  # LaTeX source + compiled PDF project report (Day 7)
+    └── .gitkeep
 ```
 
 ### 2.1 Why this structure
@@ -470,6 +493,59 @@ GET  /health     # liveness check
 Logs are flushed line-by-line so `docker compose logs webhook-logger` shows alerts in real time.
 
 ---
+
+### 4.8 `src/evaluation/evaluate_production.py` — production drift evaluation (Day 7)
+
+Standalone evaluation script that measures the canonical model's performance on the unseen 2015/16 season (3,262 matches in `data/production/season_2015_16.csv` — held out by the chronological split in `build_features`, never seen during training or test).
+
+**Purpose:** Empirically measure data drift. If F1 stays close to the canonical 0.4521 test set value, the model generalizes well to a fresh season. If it drops noticeably, that's actionable drift evidence justifying retraining cadence.
+
+**Data flow:**
+1. Load canonical model: try MLflow registry (`models:/football-outcome-predictor/latest`) first; fall back to `models/lightgbm_baseline.pkl` if the registry is unreachable. This is the same A2 graceful-degradation pattern as `src/api/main.py` startup.
+2. Load `data/production/season_2015_16.csv` and assert all 35 features are present and non-null.
+3. Compute the same metrics as `train.py`'s test-split evaluation (macro F1, ROC-AUC, accuracy, per-class F1).
+4. Read canonical test metrics from `models/metrics.json` (nested structure: `metrics['test']['macro_f1']`) for comparison.
+5. Compute `drift = production_f1 − test_f1` and assign a severity verdict using 5 bands (STABLE / MILD DRIFT / DRIFT / SEVERE DRIFT / IMPROVED).
+6. Log everything to MLflow as a `production-drift-check-<git_hash>` run with tags `stage=production_drift_check` and `drift_severity=<band>` for permanent tracking.
+7. Save a JSON drift report to `models/production_drift_report.json` for human inspection.
+
+**Invocation:** Currently manual via `docker compose exec airflow-scheduler bash -c "cd /opt/airflow/project && python -m src.evaluation.evaluate_production"`. Future work: schedule alongside the weekly retrain DAG.
+
+**Output (Day 7 baseline run):** Test F1 = 0.4521, Production F1 = 0.4379, drift = −0.0142 → MILD DRIFT verdict.
+
+### 4.9 `monitoring/alertmanager/mailtrap_relay.py` — alert email relay (Day 7)
+
+Sidecar Flask service that translates AlertManager webhook payloads into MailTrap REST API email sends. AlertManager itself doesn't natively support MailTrap's HTTP API (it's designed for SMTP), so a thin relay bridges the gap.
+
+**Why a relay instead of native SMTP?** AlertManager's SMTP support requires plain credentials in `alertmanager.yml`. Putting credentials in YAML is awkward — you'd need envsubst and a custom Dockerfile to keep them out of git. The relay pattern is simpler: alertmanager fires a webhook (no auth concerns), the Flask app reads its own creds from environment variables (loaded from `.env`), and forwards via REST.
+
+**Flow:**
+1. AlertManager fires critical-severity alert
+2. Routes to `email-critical` receiver: `http://mailtrap-relay:5001/webhook`
+3. Flask handler reads `data["alerts"]` array
+4. For each alert: extracts alertname, status, severity, summary, description
+5. POSTs to `https://sandbox.api.mailtrap.io/api/send/<inbox_id>` with formatted HTML email
+6. MailTrap captures the email in the sandbox inbox; visible at https://mailtrap.io/inboxes
+
+**Env vars:** `MAILTRAP_API_TOKEN`, `MAILTRAP_INBOX_ID`, `MAILTRAP_TO_EMAIL`, `MAILTRAP_FROM_EMAIL`, `MAILTRAP_FROM_NAME`. All loaded from `.env` (which is gitignored). `.env.example` ships in the repo as a template.
+
+Adapted from Assignment 5's webhook pattern; production-grade additions: env-var-driven configuration, structured logging, fail-loud-on-missing-env-vars at startup, `/health` endpoint for Docker healthchecks, gunicorn with 2 workers (sync) for graceful concurrency.
+
+### 4.10 `airflow/dags/football_drift_check_dag.py` — daily drift detection (Day 7)
+
+Second Airflow DAG running independently of the training DAG. Demonstrates production-grade drift monitoring: a separate schedule from training, on a daily cadence, with severity-banded gating.
+
+**Why decoupled from training DAG?** Drift detection answers a different question than training: *"is the currently-deployed model still good?"* You need this answer between retrains, not just after them. In real production with streaming data, drift could appear days before the next scheduled retrain — a daily check catches this. Even though this project's production CSV is static (fixed 2015/16 season), the DAG demonstrates the production pattern.
+
+**Schedule:** Daily at 03:00 UTC (1 hour after the weekly training DAG slot, so they never overlap).
+
+**Tasks:**
+1. `evaluate_production_drift` (BashOperator) — runs `dvc repro evaluate_production` inside the airflow-scheduler container; writes `models/production_drift_report.json`
+2. `parse_drift_verdict` (TaskFlow @task) — reads the report, computes drift vs canonical test F1 from `metrics.json`, applies severity bands, fails the DAG if `severe_drift` (>5 F1 point drop)
+
+**Severity gate:** Only `severe_drift` fails the DAG (loud). Mild/regular drift passes silently — they're observable in MLflow but don't trigger Airflow-level alerts. This prevents alert fatigue.
+
+**Pool sharing:** Uses `training_pool` (1 slot) so it can never run concurrently with the training DAG. Both DAGs respect the same single-slot constraint.
 
 ## 5. Data Schemas
 

@@ -56,6 +56,7 @@ services:
       - sqlite:////mlflow/mlflow.db
       - --default-artifact-root
       - /mlflow/mlflow_artifacts
+      - --serve-artifacts  
       - --host
       - 0.0.0.0
       - --port
@@ -168,6 +169,7 @@ services:
       - football-net
     depends_on:
       - webhook-logger
+      - mailtrap-relay
     restart: unless-stopped
 
   webhook-logger:
@@ -176,6 +178,22 @@ services:
       dockerfile: Dockerfile
     image: football-webhook-logger:latest
     container_name: football-webhook-logger
+    networks:
+      - football-net
+    restart: unless-stopped
+
+  mailtrap-relay:
+    build:
+      context: .
+      dockerfile: monitoring/alertmanager/Dockerfile.relay
+    image: football-mailtrap-relay:latest
+    container_name: football-mailtrap-relay
+    environment:
+      - MAILTRAP_API_TOKEN=${MAILTRAP_API_TOKEN}
+      - MAILTRAP_INBOX_ID=${MAILTRAP_INBOX_ID}
+      - MAILTRAP_TO_EMAIL=${MAILTRAP_TO_EMAIL}
+      - MAILTRAP_FROM_EMAIL=${MAILTRAP_FROM_EMAIL:-alerts@football-mlops.example.com}
+      - MAILTRAP_FROM_NAME=${MAILTRAP_FROM_NAME:-Football MLOps AlertManager}
     networks:
       - football-net
     restart: unless-stopped

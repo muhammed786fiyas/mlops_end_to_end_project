@@ -62,6 +62,8 @@ FEATURE_COLUMNS = [
     'away_buildUpPlaySpeed', 'away_buildUpPlayDribbling', 'away_buildUpPlayPassing',
     'away_chanceCreationPassing', 'away_chanceCreationCrossing', 'away_chanceCreationShooting',
     'away_defencePressure', 'away_defenceAggression', 'away_defenceTeamWidth',
+    # ELO (3) — Day 7 experiment
+    'home_elo', 'away_elo', 'elo_diff',
 ]
 TARGET_COLUMN = 'outcome_encoded'
 TARGET_NAMES = ['H', 'D', 'A']
@@ -260,7 +262,7 @@ def main(
     models_dir = project_root / "models"
 
     # Apply CLI overrides
-    model_params = dict(params['model'])
+    model_params = dict(params['algorithms']['lightgbm'])
     if learning_rate is not None:
         model_params['learning_rate'] = learning_rate
     if num_leaves is not None:

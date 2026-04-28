@@ -1,7 +1,7 @@
 # Test Plan — Football MLOps End-to-End Project
 
-**Document version:** 1.0
-**Last updated:** 2026-04-28 (Day 6)
+**Document version:** 1.1
+**Last updated:** 2026-04-28 (Day 7)
 **Project:** DA5402 Final Project — Football Match Outcome Prediction
 **Author:** Muhammed Fiyas
 

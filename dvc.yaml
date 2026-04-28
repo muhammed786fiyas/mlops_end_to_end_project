@@ -22,6 +22,7 @@ stages:
       - data/processed/train.csv
       - data/processed/test.csv
       - data/processed/team_lookup.csv
+      - data/processed/team_elos.csv
       - data/production/season_2015_16.csv
 
   train:
@@ -32,7 +33,7 @@ stages:
       - data/processed/train.csv
       - data/processed/test.csv
     params:
-      - model
+      - algorithms.lightgbm
       - training
     outs:
       - models/lightgbm_baseline.pkl
@@ -40,4 +41,33 @@ stages:
       - models/training_metadata.json
     metrics:
       - models/metrics.json:
+          cache: false
+
+  train_xgboost:
+    cmd: python -m src.training.train_xgboost
+    deps:
+      - src/training/train_xgboost.py
+      - src/utils/logger.py
+      - data/processed/train.csv
+      - data/processed/test.csv
+    params:
+      - algorithms.xgboost
+      - training
+    outs:
+      - models/xgboost_experiment.pkl
+      - models/xgboost_feature_importance.png
+    metrics:
+      - models/xgboost_metrics.json:
+          cache: false
+
+  evaluate_production:
+    cmd: python -m src.evaluation.evaluate_production
+    deps:
+      - src/evaluation/evaluate_production.py
+      - src/utils/logger.py
+      - data/production/season_2015_16.csv
+      - models/lightgbm_baseline.pkl
+      - models/metrics.json
+    metrics:
+      - models/production_drift_report.json:
           cache: false

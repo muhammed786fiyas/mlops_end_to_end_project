@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Football MLOps — Operations Console</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    color: #e2e8f0;
+    min-height: 100vh;
+    padding: 2rem 1rem;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+  header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+    padding: 2rem 1rem;
+    border-bottom: 1px solid #334155;
+  }
+  header h1 {
+    font-size: 2.25rem;
+    color: #f1f5f9;
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+  }
+  header h1 .icon { font-size: 2rem; }
+  header p {
+    color: #94a3b8;
+    font-size: 1rem;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 2.5rem;
+  }
+  .card {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+    display: flex;
+    flex-direction: column;
+    min-height: 180px;
+  }
+  .card:hover {
+    transform: translateY(-3px);
+    border-color: #3b82f6;
+    box-shadow: 0 8px 24px rgba(59, 130, 246, 0.2);
+  }
+  .card-icon {
+    font-size: 2rem;
+    margin-bottom: 0.75rem;
+  }
+  .card-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: #f1f5f9;
+    margin-bottom: 0.5rem;
+  }
+  .card-desc {
+    color: #94a3b8;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    margin-bottom: 1rem;
+    flex-grow: 1;
+  }
+  .card-url {
+    color: #60a5fa;
+    font-family: "Monaco", "Menlo", monospace;
+    font-size: 0.8rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #334155;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .card.primary { border-color: #3b82f6; }
+  .card.primary .card-url { color: #93c5fd; }
+
+  .summary-section {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+  }
+  .summary-section h2 {
+    color: #f1f5f9;
+    margin-bottom: 1.25rem;
+    font-size: 1.25rem;
+  }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.25rem;
+  }
+  .stat {
+    border-left: 3px solid #3b82f6;
+    padding-left: 1rem;
+  }
+  .stat-label {
+    color: #94a3b8;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+  }
+  .stat-value {
+    color: #f1f5f9;
+    font-size: 1.4rem;
+    font-weight: 600;
+  }
+  .stat-detail {
+    color: #64748b;
+    font-size: 0.8rem;
+    margin-top: 0.25rem;
+  }
+
+  footer {
+    text-align: center;
+    color: #64748b;
+    font-size: 0.85rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #334155;
+  }
+  footer a { color: #60a5fa; text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1><span class="icon">⚽</span> Football MLOps — Operations Console</h1>
+    <p>Single entry point to every tool in the 11-container MLOps stack.
+       Click any card to open that service's native UI.</p>
+  </header>
+
+  <div class="grid">
+    <a href="/" class="card primary">
+      <div class="card-icon">🎯</div>
+      <div class="card-title">Make a Prediction</div>
+      <div class="card-desc">Pick two teams, get H/D/A prediction with class probabilities and inference latency.</div>
+      <div class="card-url">localhost:8080/</div>
+    </a>
+
+    <a href="http://localhost:5000" target="_blank" class="card">
+      <div class="card-icon">📊</div>
+      <div class="card-title">MLflow</div>
+      <div class="card-desc">Experiment tracking with full run history, parameter comparison, model registry with versioned models.</div>
+      <div class="card-url">localhost:5000</div>
+    </a>
+
+    <a href="http://localhost:8081" target="_blank" class="card">
+      <div class="card-icon">🔄</div>
+      <div class="card-title">Airflow</div>
+      <div class="card-desc">Pipeline DAG graph, task instance history, manual trigger, retry failed tasks. Login: admin/admin.</div>
+      <div class="card-url">localhost:8081</div>
+    </a>
+
+    <a href="http://localhost:3000" target="_blank" class="card">
+      <div class="card-icon">📈</div>
+      <div class="card-title">Grafana</div>
+      <div class="card-desc">11-panel service dashboard following the Four Golden Signals: latency, traffic, errors, saturation.</div>
+      <div class="card-url">localhost:3000</div>
+    </a>
+
+    <a href="http://localhost:9090" target="_blank" class="card">
+      <div class="card-icon">🔥</div>
+      <div class="card-title">Prometheus</div>
+      <div class="card-desc">Scrape targets, raw metrics queries with PromQL, alert rule evaluation status.</div>
+      <div class="card-url">localhost:9090</div>
+    </a>
+
+    <a href="http://localhost:9093" target="_blank" class="card">
+      <div class="card-icon">🚨</div>
+      <div class="card-title">AlertManager</div>
+      <div class="card-desc">Active firing alerts, severity-based routing, silences, inhibition rules.</div>
+      <div class="card-url">localhost:9093</div>
+    </a>
+
+    <a href="http://localhost:8000/docs" target="_blank" class="card">
+      <div class="card-icon">🔌</div>
+      <div class="card-title">API Documentation</div>
+      <div class="card-desc">Interactive Swagger UI — explore /predict, /teams, /health, /metrics endpoints with live testing.</div>
+      <div class="card-url">localhost:8000/docs</div>
+    </a>
+
+    <a href="https://github.com/muhammed786fiyas/mlops_end_to_end_project" target="_blank" class="card">
+      <div class="card-icon">📁</div>
+      <div class="card-title">Source Code</div>
+      <div class="card-desc">GitHub repository with full HLD, LLD, test plan, user manual, daily logs, and tagged milestones.</div>
+      <div class="card-url">github.com → repository</div>
+    </a>
+  </div>
+
+  <div class="summary-section">
+    <h2>📊 Pipeline Performance — Observed Benchmarks</h2>
+    <p style="color: #64748b; font-size: 0.85rem; margin-bottom: 1.25rem;">
+      Observed benchmarks from Day 5 instrumentation runs. For real-time numbers, see the
+      <a href="http://localhost:3000" target="_blank" style="color: #60a5fa;">Grafana dashboard</a>.
+    </p>
+    <div class="summary-grid">
+      <div class="stat">
+        <div class="stat-label">Inference Latency (p95)</div>
+        <div class="stat-value">~75 ms</div>
+        <div class="stat-detail">p50 ≈ 39 ms · p99 ≈ 95 ms</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Throughput Sustained</div>
+        <div class="stat-value">~30 req/s</div>
+        <div class="stat-detail">No errors at this rate</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Training Pipeline</div>
+        <div class="stat-value">3–4 min</div>
+        <div class="stat-detail">~5 s with DVC cache hit</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Stack</div>
+        <div class="stat-value">11 containers</div>
+        <div class="stat-detail">All on football-net bridge</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    DA5402 Final Project · Football Match Outcome Prediction · Built by Muhammed Fiyas ·
+    <a href="https://github.com/muhammed786fiyas/mlops_end_to_end_project" target="_blank">GitHub</a>
+  </footer>
+</div>
+</body>
+</html>

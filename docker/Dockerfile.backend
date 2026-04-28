@@ -36,6 +36,7 @@ COPY models/lightgbm_baseline.pkl      ./models/
 COPY models/training_metadata.json     ./models/
 COPY data/raw/database.sqlite          ./data/raw/
 COPY data/processed/team_lookup.csv    ./data/processed/
+COPY data/processed/team_elos.csv      ./data/processed/
 
 # Ensure logs directory exists (logger writes to it)
 RUN mkdir -p logs
