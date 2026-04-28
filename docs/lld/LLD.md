@@ -38,7 +38,10 @@ mlops_end_to_end_project/
 │   ├── features/
 │   │   └── build_features.py        # batch feature engineering (DVC stage)
 │   ├── training/
-│   │   └── train.py                 # LightGBM training + MLflow logging (DVC stage)
+│   │   ├── train.py                 # LightGBM training + MLflow logging (DVC stage)
+│   │   └── train_xgboost.py         # XGBoost comparison experiment (DVC stage, Day 7)
+│   ├── evaluation/                  # Day 7 — production drift evaluation
+│   │   └── evaluate_production.py   # measures F1 drift on unseen 2015/16 season
 │   └── utils/
 │       └── logger.py                # rotating-file logger factory
 │
@@ -48,14 +51,20 @@ mlops_end_to_end_project/
 │   ├── production/                  # season_2015_16.csv (drift simulation)
 │   └── triggers/                    # FileSensor target dir
 │
-├── models/                  # DVC-tracked
-│   ├── lightgbm_baseline.pkl        # current best model (also in MLflow registry)
-│   ├── metrics.json                 # train/val/test F1, ROC-AUC, accuracy
+├── models/                  # DVC-tracked (with .gitignore for binaries)
+│   ├── lightgbm_baseline.pkl        # canonical model (also in MLflow registry as v17)
+│   ├── metrics.json                 # train/val/test F1, ROC-AUC, accuracy (cache:false)
 │   ├── training_metadata.json       # git_hash, params, dates
-│   └── feature_importance.png       # plot
+│   ├── feature_importance.png       # LightGBM plot
+│   ├── xgboost_experiment.pkl       # Day 7 comparison run (NOT registered)
+│   ├── xgboost_metrics.json         # Day 7 (cache:false)
+│   ├── xgboost_feature_importance.png
+│   └── production_drift_report.json # Day 7 drift evaluation output
 │
 ├── frontend/                # not Python — vanilla static UI
-│   ├── templates/index.html
+│   ├── templates/
+│   │   ├── index.html               # prediction UI
+│   │   └── dashboard.html           # operations console (Day 7)
 │   └── static/{app.js, style.css}
 │
 ├── docker/                  # Dockerfiles
@@ -470,6 +479,25 @@ GET  /health     # liveness check
 Logs are flushed line-by-line so `docker compose logs webhook-logger` shows alerts in real time.
 
 ---
+
+### 4.8 `src/evaluation/evaluate_production.py` — production drift evaluation (Day 7)
+
+Standalone evaluation script that measures the canonical model's performance on the unseen 2015/16 season (3,262 matches in `data/production/season_2015_16.csv` — held out by the chronological split in `build_features`, never seen during training or test).
+
+**Purpose:** Empirically measure data drift. If F1 stays close to the canonical 0.4521 test set value, the model generalizes well to a fresh season. If it drops noticeably, that's actionable drift evidence justifying retraining cadence.
+
+**Data flow:**
+1. Load canonical model: try MLflow registry (`models:/football-outcome-predictor/latest`) first; fall back to `models/lightgbm_baseline.pkl` if the registry is unreachable. This is the same A2 graceful-degradation pattern as `src/api/main.py` startup.
+2. Load `data/production/season_2015_16.csv` and assert all 35 features are present and non-null.
+3. Compute the same metrics as `train.py`'s test-split evaluation (macro F1, ROC-AUC, accuracy, per-class F1).
+4. Read canonical test metrics from `models/metrics.json` (nested structure: `metrics['test']['macro_f1']`) for comparison.
+5. Compute `drift = production_f1 − test_f1` and assign a severity verdict using 5 bands (STABLE / MILD DRIFT / DRIFT / SEVERE DRIFT / IMPROVED).
+6. Log everything to MLflow as a `production-drift-check-<git_hash>` run with tags `stage=production_drift_check` and `drift_severity=<band>` for permanent tracking.
+7. Save a JSON drift report to `models/production_drift_report.json` for human inspection.
+
+**Invocation:** Currently manual via `docker compose exec airflow-scheduler bash -c "cd /opt/airflow/project && python -m src.evaluation.evaluate_production"`. Future work: schedule alongside the weekly retrain DAG.
+
+**Output (Day 7 baseline run):** Test F1 = 0.4521, Production F1 = 0.4379, drift = −0.0142 → MILD DRIFT verdict.
 
 ## 5. Data Schemas
 

@@ -147,7 +147,7 @@ flowchart TB
 
 | Service | Responsibility | Key technology |
 |---|---|---|
-| **frontend** | Serve static HTML/CSS/JS for the prediction UI | Nginx alpine |
+| **frontend** | Serve static HTML/CSS/JS for the prediction UI (`/`) and operations console landing page (`/dashboard.html`, links out to all 8 system UIs) | Nginx alpine |
 | **backend** | Inference API; loads model at startup; computes live features; exposes `/metrics` | FastAPI + LightGBM + prometheus-client |
 | **mlflow** | Experiment tracking server + model registry | MLflow 3.x |
 | **airflow-scheduler** | Executes DAGs on schedule; runs DVC stages | Airflow 3.1 LocalExecutor |
@@ -328,6 +328,20 @@ Three layers of observability:
 - The model contract test (`test_feature_columns_match_train_contract`) prevents the highest-impact silent bug — train/serve feature mismatch
 
 ---
+
+### 7.7 Production drift evaluation
+
+A standalone evaluation module `src/evaluation/evaluate_production.py` measures how the canonical model performs on the held-out production dataset (`data/production/season_2015_16.csv`, 3,262 matches from the 2015/2016 season — never seen during training or test). The script logs results to MLflow as a `production-drift-check` run and computes drift delta vs canonical test metrics, classifying severity using 5 bands tuned for this domain:
+
+| Drift band | Threshold (F1 delta vs test) | Action |
+|---|---|---|
+| **IMPROVED** | ≥ +0.02 | Investigate (unusual) |
+| **STABLE** | −0.01 to +0.02 | None — within typical inter-season variance |
+| **MILD DRIFT** | −0.03 to −0.01 | Monitor over next 2 seasons |
+| **DRIFT** | −0.05 to −0.03 | Schedule retraining within 30 days |
+| **SEVERE DRIFT** | < −0.05 | Retrain immediately |
+
+The script uses the same A2 graceful-degradation pattern as the FastAPI backend on startup: try MLflow registry first, fall back to local pickle if the registry is unreachable. Currently invoked manually; future work is to schedule this evaluation alongside the weekly retrain DAG so production drift is continuously measured.
 
 ## 8. Risks & Assumptions
 

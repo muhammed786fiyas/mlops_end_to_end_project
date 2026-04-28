@@ -1,7 +1,7 @@
 # User Manual — Football MLOps End-to-End Project
 
-**Document version:** 1.0   
-**Last updated:** 2026-04-28 (Day 6)    
+**Document version:** 1.1   
+**Last updated:** 2026-04-28 (Day 7)    
 **Project:** DA5402 Final Project — Football Match Outcome Prediction   
 **Author:** Muhammed Fiyas  
 **Companion documents:** [HLD](../hld/HLD.md) · [LLD](../lld/LLD.md) · [Test Plan](../test_plan/TEST_PLAN.md)
@@ -28,7 +28,7 @@ cd mlops_end_to_end_project
 docker compose up -d
 ```
 
-Wait ~60 seconds for all services to come up, then open **http://localhost:8080** in a browser. Pick two teams, click Predict.
+Wait ~60 seconds for all services to come up, then open **http://localhost:8080/dashboard.html** in a browser for the operations console (one-stop entry to every UI in the system), or **http://localhost:8080** to make a prediction directly.
 
 If anything fails, see [Section 9 — Troubleshooting](#9-troubleshooting).
 
@@ -176,12 +176,13 @@ Expected:
 
 ---
 
-## 5. The Seven Web UIs
+## 5. The Eight Web UIs
 
-Each container exposing a UI is reachable on a different localhost port. There's no single "dashboard"; each tool is independently useful.
+Each container exposing a UI is reachable on a different localhost port. The **operations console** at `/dashboard.html` provides a single landing page that links out to the other seven; each tool itself is independently useful with its own UI depth.
 
 | URL | Service | Login | Purpose |
 |---|---|---|---|
+| http://localhost:8080/dashboard.html | **Operations Console** | — | **Single navigation page linking to all UIs** (Day 7) |
 | http://localhost:8080 | Frontend | — | **Make a prediction** |
 | http://localhost:8000/docs | Backend Swagger | — | Interactive API explorer |
 | http://localhost:5000 | MLflow | — | Experiment runs + model registry |
@@ -301,7 +302,27 @@ You should see a formatted alert payload with `alert: BackendDown`, `severity: c
 docker compose start backend
 ```
 
-### 6.7 Stop the stack
+### 6.7 Run production drift evaluation (Day 7)
+
+```bash
+docker compose exec airflow-scheduler bash -c "cd /opt/airflow/project && python -m src.evaluation.evaluate_production"
+```
+
+Evaluates the canonical model on the held-out 2015/16 season (3,262 unseen matches) and reports drift severity vs the canonical test set:
+
+```
+DRIFT COMPARISON
+  Test F1 (2014/15):       0.4521
+  Production F1 (2015/16): 0.4379
+  Drift (prod - test):     -0.0142
+  Verdict: MILD DRIFT detected (-0.014 F1) — monitor over next 2 seasons
+```
+
+The verdict uses 5 severity bands (STABLE / MILD DRIFT / DRIFT / SEVERE DRIFT / IMPROVED). Results are logged to MLflow as a `production-drift-check-<git_hash>` run for permanent tracking, and a JSON drift report is saved to `models/production_drift_report.json`.
+
+This script runs inside the airflow-scheduler container because that's where the production DAG would invoke it. The script falls back to the local model pickle if the MLflow model registry is unreachable — same graceful degradation pattern the FastAPI backend uses.
+
+### 6.8 Stop the stack
 
 ```bash
 docker compose down              # stops and removes containers; volumes persist
@@ -327,12 +348,14 @@ data:
 
 ### 7.2 Hyperparameters — `params.yaml`
 
-DVC-tracked. To experiment with different settings:
+DVC-tracked, with a nested `algorithms.{lightgbm,xgboost}` structure (Day 7 refactor) so different model types can coexist without naming collisions. To experiment with different settings:
 
-1. Edit `params.yaml` (e.g., change `model.num_leaves` from 15 to 31)
+1. Edit `params.yaml` (e.g., change `algorithms.lightgbm.num_leaves` from 15 to 31)
 2. Run `dvc repro` from the host or inside the airflow-scheduler container
-3. DVC re-runs only the affected pipeline stages (`train`, since model params changed)
+3. DVC re-runs only the affected pipeline stages (`train`, since lightgbm params changed)
 4. A new MLflow run appears with the updated params and metrics
+
+Two parallel training stages are defined: `train` (canonical LightGBM, registered as production) and `train_xgboost` (XGBoost comparison experiment, not registered). Run a specific stage with `dvc repro <stage_name>`.
 
 ### 7.3 Authentication
 
@@ -460,7 +483,7 @@ This is **DVC working as designed**, not a bug. `dvc repro train` checks input h
 docker compose exec airflow-scheduler bash -c "cd /opt/airflow/project && dvc repro --force train"
 ```
 
-Or modify a tracked input (e.g., bump `model.num_leaves` in `params.yaml`).
+Or modify a tracked input (e.g., bump `algorithms.lightgbm.num_leaves` in `params.yaml`).
 
 ### 9.7 Resolved alert notification didn't arrive at webhook-logger
 
@@ -501,15 +524,17 @@ For a quick demonstration of every rubric area:
 | Time | Action | URL | What to point out |
 |---|---|---|---|
 | 0:00 | `docker compose up -d` | terminal | "11 containers, one command" |
-| 0:30 | Open frontend, predict Real Madrid vs Barcelona | localhost:8080 | "Probability bars + container ID + latency" |
-| 1:00 | Open MLflow | localhost:5000 | "Every training run logged with params + metrics; model registry tracks versions" |
-| 1:30 | Open Airflow | localhost:8081 | "Scheduled DAG with sensor + pool + retries + quality gate" |
-| 2:00 | Open Grafana | localhost:3000 | "11-panel dashboard following Four Golden Signals" |
-| 2:30 | Open Prometheus targets | localhost:9090/targets | "Backend /metrics scraped every 15s" |
-| 3:00 | Stop backend, watch BackendDown fire | terminal + localhost:9093 | "Alert state machine: inactive → pending → firing" |
+| 0:30 | Open operations console, click into prediction UI | localhost:8080/dashboard.html | "One landing page; each tool keeps its native UI depth" |
+| 0:45 | Predict Real Madrid vs Granada | localhost:8080 | "Probability bars + container ID + latency" |
+| 1:15 | Open MLflow (3 runs to compare) | localhost:5000 | "Baseline, ELO experiment, XGBoost experiment all logged" |
+| 1:45 | Open Airflow | localhost:8081 | "Scheduled DAG with sensor + pool + retries + quality gate" |
+| 2:15 | Open Grafana | localhost:3000 | "11-panel dashboard following Four Golden Signals" |
+| 2:45 | Open Prometheus targets | localhost:9090/targets | "Backend /metrics scraped every 15s" |
+| 3:15 | Stop backend, watch BackendDown fire | terminal + localhost:9093 | "Alert state machine: inactive → pending → firing" |
 | 3:45 | Restart backend | terminal | "Recovery" |
 | 4:00 | Run pytest suite | terminal | "14 tests in under 5 seconds; contract test prevents silent train/serve drift" |
-| 4:30 | Show GitHub repo with daily logs and HLD | github.com | "Full design rationale in version control" |
+| 4:30 | Run drift evaluation script | terminal | "Mild drift detected on unseen 2015/16 season; F1 −1.4%" |
+| 4:45 | Show GitHub repo with daily logs and HLD | github.com | "Full design rationale in version control" |
 | 5:00 | Done |
 
 ---
@@ -530,3 +555,4 @@ For a quick demonstration of every rubric area:
 | Version | Date | Author | Notes |
 |---|---|---|---|
 | 1.0 | 2026-04-28 | Muhammed Fiyas | Initial user manual covering v0.5.0 milestone |
+| 1.1 | 2026-04-28 | Muhammed Fiyas | Day 7: added operations console (8 UIs total), drift evaluation workflow (§6.7), nested algorithms params structure note (§7.2), updated demo walkthrough |

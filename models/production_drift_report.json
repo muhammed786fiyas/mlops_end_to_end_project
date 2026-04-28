@@ -1,0 +1,15 @@
+{
+  "evaluation_timestamp_utc": "2026-04-28T11:47:24.185779",
+  "model_version": "local:lightgbm_baseline.pkl",
+  "production_season": "2015/2016",
+  "n_matches": 3262,
+  "metrics": {
+    "production_macro_f1": 0.4379311321521963,
+    "production_roc_auc": 0.6359827418959482,
+    "production_accuracy": 0.4601471489883507,
+    "production_f1_H": 0.5609127714390872,
+    "production_f1_D": 0.2782089552238806,
+    "production_f1_A": 0.474671669793621
+  },
+  "git_commit": "a0ceade"
+}
