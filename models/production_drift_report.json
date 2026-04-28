@@ -1,6 +1,6 @@
 {
-  "evaluation_timestamp_utc": "2026-04-28T11:47:24.185779",
-  "model_version": "local:lightgbm_baseline.pkl",
+  "evaluation_timestamp_utc": "2026-04-28T17:44:30.347609",
+  "model_version": "mlflow:football-outcome-predictor@latest",
   "production_season": "2015/2016",
   "n_matches": 3262,
   "metrics": {
@@ -11,5 +11,5 @@
     "production_f1_D": 0.2782089552238806,
     "production_f1_A": 0.474671669793621
   },
-  "git_commit": "a0ceade"
+  "git_commit": "a1ff0bb"
 }

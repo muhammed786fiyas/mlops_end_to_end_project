@@ -120,11 +120,13 @@ flowchart TB
         grafana["grafana<br/>:3000"]
         am["alertmanager<br/>:9093"]
         whlog["webhook-logger<br/>(receiver stub)"]
+        mailtrap["mailtrap-relay<br/>(Flask, :5001)<br/>Day 7"]
     end
 
     user(["User<br/>browser"])
     sqlite[("SQLite<br/>raw data")]
     artifacts[("MLflow<br/>artifacts<br/>(host volume)")]
+    email(["MailTrap<br/>sandbox<br/>inbox"])
 
     user -->|HTTP| frontend
     frontend -->|"REST /predict"| backend
@@ -132,7 +134,7 @@ flowchart TB
     backend -->|read history| sqlite
     prom -.->|"scrape /metrics<br/>every 15s"| backend
 
-    scheduler -->|"runs DVC<br/>repro train"| backend
+    scheduler -->|"runs DVC<br/>(2 DAGs: weekly train +<br/>daily drift check)"| backend
     scheduler -.->|store DAG state| postgres
     webserver -.->|read state| postgres
     scheduler -->|"log run<br/>register model"| mlflow
@@ -140,6 +142,8 @@ flowchart TB
 
     prom -->|fires alerts| am
     am -->|webhook POST| whlog
+    am -->|"webhook<br/>(critical only)"| mailtrap
+    mailtrap -->|REST API| email
     prom -->|PromQL| grafana
 ```
 
