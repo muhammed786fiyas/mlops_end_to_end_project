@@ -64,49 +64,93 @@ stages:
       size: 6391624
     - path: src/training/train.py
       hash: md5
-      md5: 6b20a04dcbfcc202090ac8676411cdea
-      size: 14337
+      md5: 83d003501704ad3457d18dacd41e69cb
+      size: 14354
     - path: src/utils/logger.py
       hash: md5
       md5: da79a8b06744206d7f95a3117878ecab
       size: 3881
     params:
       params.yaml:
-        model:
-          algorithm: lightgbm
-          objective: multiclass
-          num_class: 3
-          metric: multi_logloss
+        algorithms.lightgbm:
           num_leaves: 15
-          max_depth: 6
-          min_child_samples: 50
-          n_estimators: 1000
           learning_rate: 0.03
+          n_estimators: 1000
+          min_child_samples: 20
           reg_alpha: 0.1
           reg_lambda: 0.1
           subsample: 0.8
-          subsample_freq: 1
           colsample_bytree: 0.8
           class_weight: balanced
           random_state: 42
-          verbose: -1
         training:
           val_fraction: 0.15
           early_stopping_rounds: 50
     outs:
     - path: models/feature_importance.png
       hash: md5
-      md5: cf94885c69fcbaa7c1381742ec8aca53
-      size: 107031
+      md5: d2d878c28393b8acb8574e3c54d8d7fc
+      size: 107051
     - path: models/lightgbm_baseline.pkl
       hash: md5
-      md5: 78d1812b48b7dc92e8acbd0150a6e1df
-      size: 609452
+      md5: 8304e0e7eb6ae8daf149bfce8a65ec95
+      size: 503484
     - path: models/metrics.json
       hash: md5
-      md5: 5b79b143590adb5a56feaa3687d78eba
-      size: 1364
+      md5: 324fbec575497c3fb27f9d1a4ad4c2ca
+      size: 1368
     - path: models/training_metadata.json
       hash: md5
-      md5: 846e521c974e15874a53e3e91e75020e
-      size: 1705
+      md5: 0142dc87e50e47194daab3eca19a9385
+      size: 1529
+  train_xgboost:
+    cmd: python -m src.training.train_xgboost
+    deps:
+    - path: data/processed/test.csv
+      hash: md5
+      md5: be4d37bc36614f0c1b4c0e583e3380a1
+      size: 891099
+    - path: data/processed/train.csv
+      hash: md5
+      md5: 7b08506a92c6c463d62521aff15163d8
+      size: 6391624
+    - path: src/training/train_xgboost.py
+      hash: md5
+      md5: f17d957718cd148236e3e25127102dfd
+      size: 9991
+    - path: src/utils/logger.py
+      hash: md5
+      md5: da79a8b06744206d7f95a3117878ecab
+      size: 3881
+    params:
+      params.yaml:
+        algorithms.xgboost:
+          max_depth: 6
+          learning_rate: 0.05
+          n_estimators: 1000
+          min_child_weight: 5
+          reg_alpha: 0.1
+          reg_lambda: 0.1
+          subsample: 0.8
+          colsample_bytree: 0.8
+          objective: multi:softprob
+          eval_metric: mlogloss
+          random_state: 42
+          tree_method: hist
+          use_label_encoder: false
+        training:
+          val_fraction: 0.15
+          early_stopping_rounds: 50
+    outs:
+    - path: models/xgboost_experiment.pkl
+      hash: md5
+      md5: ee0033c127647eff70ee4f26e2c7aa2f
+      size: 1364346
+    - path: models/xgboost_feature_importance.png
+      hash: md5
+      md5: a08c27001ab33bbb311c3c6494cfca76
+      size: 81912
+    - path: models/xgboost_metrics.json
+      hash: md5
+      md5: f222610802428254a83a466df81daee3
+      size: 671

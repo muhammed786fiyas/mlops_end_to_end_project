@@ -262,7 +262,7 @@ def main(
     models_dir = project_root / "models"
 
     # Apply CLI overrides
-    model_params = dict(params['model'])
+    model_params = dict(params['algorithms']['lightgbm'])
     if learning_rate is not None:
         model_params['learning_rate'] = learning_rate
     if num_leaves is not None:
