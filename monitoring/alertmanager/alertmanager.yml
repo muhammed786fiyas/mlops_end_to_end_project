@@ -23,6 +23,11 @@ route:
         - severity = critical
       receiver: webhook-critical
       group_wait: 0s                 # critical = no batching delay
+      continue: true                 # don't stop here — also fan out to email
+    - matchers:
+        - severity = critical
+      receiver: email-critical
+      group_wait: 0s
       continue: false
 
 # Inhibition: if a critical alert fires, suppress lower-severity alerts
@@ -46,4 +51,9 @@ receivers:
   - name: webhook-critical
     webhook_configs:
       - url: http://webhook-logger:8080/critical
+        send_resolved: true
+
+  - name: email-critical
+    webhook_configs:
+      - url: http://mailtrap-relay:5001/webhook
         send_resolved: true

@@ -1,9 +1,9 @@
 # User Manual — Football MLOps End-to-End Project
 
-**Document version:** 1.1   
-**Last updated:** 2026-04-28 (Day 7)    
-**Project:** DA5402 Final Project — Football Match Outcome Prediction   
-**Author:** Muhammed Fiyas  
+**Document version:** 1.2
+**Last updated:** 2026-04-28 (Day 7 — full feature set)
+**Project:** DA5402 Final Project — Football Match Outcome Prediction
+**Author:** Muhammed Fiyas
 **Companion documents:** [HLD](../hld/HLD.md) · [LLD](../lld/LLD.md) · [Test Plan](../test_plan/TEST_PLAN.md)
 
 ---
@@ -12,7 +12,7 @@
 
 This is an end-to-end MLOps system that predicts the outcome of European football matches — Home Win, Draw, or Away Win — given two competing teams. Open the web UI, pick two teams, click Predict, see the prediction with class probabilities and inference latency.
 
-Behind the simple UI is a production-shape MLOps stack: data versioning (DVC), experiment tracking (MLflow), scheduled retraining (Airflow), monitoring (Prometheus + Grafana), and alerting (AlertManager). The full stack is 11 Docker containers.
+Behind the simple UI is a production-shape MLOps stack: data versioning (DVC), experiment tracking (MLflow), scheduled retraining (Airflow), monitoring (Prometheus + Grafana), and alerting (AlertManager + MailTrap email relay). The full stack is 12 Docker containers.
 
 This manual tells you how to install, run, and operate the system. For architectural detail see the [HLD](../hld/HLD.md); for code-level detail see the [LLD](../lld/LLD.md).
 
@@ -30,6 +30,8 @@ docker compose up -d
 
 Wait ~60 seconds for all services to come up, then open **http://localhost:8080/dashboard.html** in a browser for the operations console (one-stop entry to every UI in the system), or **http://localhost:8080** to make a prediction directly.
 
+For email alerts to work, copy `.env.example` to `.env` and fill in your MailTrap credentials. See §7.3 for details. Email alerts are optional — without `.env` the stack still runs but the `mailtrap-relay` container will fail at startup (other services are unaffected).
+
 If anything fails, see [Section 9 — Troubleshooting](#9-troubleshooting).
 
 ---
@@ -40,10 +42,10 @@ If anything fails, see [Section 9 — Troubleshooting](#9-troubleshooting).
 
 | Tool | Minimum version | Why |
 |---|---|---|
-| **Docker Engine** | 20.10+ | Runs all 11 services |
+| **Docker Engine** | 20.10+ | Runs all 12 services |
 | **Docker Compose** | v2 (`docker compose` — note the space) | Stack orchestration |
 | **Git** | any modern version | Clone the repo |
-| **8 GB RAM free** | — | All 11 containers fit comfortably under 4 GB; 8 GB allows headroom |
+| **8 GB RAM free** | — | All 12 containers fit comfortably under 4 GB; 8 GB allows headroom |
 | **5 GB free disk** | — | Docker images + DVC remote + database |
 
 Verify with:
@@ -64,6 +66,7 @@ df -h .                   # check disk space
 | **VS Code** | Editing markdown / Mermaid diagrams |
 | **DVC CLI** | Version-controlling data outside Docker |
 | **kaggle CLI** | Downloading the source dataset (only needed first time, and the SQLite is already DVC-tracked in this repo) |
+| **MailTrap account** | Free sandbox at https://mailtrap.io for email-alert testing |
 
 ### 3.3 Operating system
 
@@ -116,13 +119,23 @@ If the database is missing, the backend container will fail to start with a clea
 
 ### 4.3 Build and start the stack
 
+Before bringing the stack up, configure email alerting:
+
+```bash
+# Copy the env template and fill in MailTrap credentials (see §7.3)
+cp .env.example .env
+# edit .env with your real values
+```
+
+Then start everything:
+
 ```bash
 docker compose up -d
 ```
 
 What `up -d` does:
 
-- Builds custom images (`backend`, `frontend`, `airflow-*`, `webhook-logger`) — first run takes ~10 minutes
+- Builds custom images (`backend`, `frontend`, `airflow-*`, `webhook-logger`, `mailtrap-relay`) — first run takes ~10 minutes
 - Pulls public images (`mlflow`, `postgres`, `prometheus`, `grafana`, `alertmanager`)
 - Creates the `football-net` Docker bridge network
 - Creates persistent named volumes (`prometheus-data`, `grafana-data`, etc.)
@@ -136,7 +149,7 @@ On a fresh machine, the first `docker compose up` takes 10–15 minutes (mostly 
 docker compose ps
 ```
 
-Expected output (10 running containers + 1 exited init container):
+Expected output (11 running containers + 1 exited init container):
 
 ```
 NAME                         STATUS
@@ -147,6 +160,7 @@ football-alertmanager        Up
 football-backend             Up (healthy)
 football-frontend            Up
 football-grafana             Up
+football-mailtrap-relay      Up                     ← Day 7: relays critical alerts to email
 football-mlflow              Up
 football-postgres            Up (healthy)
 football-prometheus          Up
@@ -244,6 +258,12 @@ docker compose exec airflow-scheduler bash -c "cd /opt/airflow/project && dvc re
 
 This bypasses DVC's cache and produces a new MLflow model version.
 
+Alternatively, `run_training.sh` is a wrapper around `mlflow run .` that sets the experiment name and uses the local conda env. Inside the container:
+
+```bash
+docker compose exec airflow-scheduler bash -c "cd /opt/airflow/project && ./run_training.sh -e train"
+```
+
 ### 6.4 Run the test suite
 
 ```bash
@@ -322,7 +342,47 @@ The verdict uses 5 severity bands (STABLE / MILD DRIFT / DRIFT / SEVERE DRIFT / 
 
 This script runs inside the airflow-scheduler container because that's where the production DAG would invoke it. The script falls back to the local model pickle if the MLflow model registry is unreachable — same graceful degradation pattern the FastAPI backend uses.
 
-### 6.8 Stop the stack
+A separate Airflow DAG (`football_drift_check`) runs this evaluation daily at 03:00 UTC, decoupled from the weekly training schedule. The DAG fails loudly only on `severe_drift` (>5 F1 point drop); milder drift is logged but doesn't trigger an alert.
+
+### 6.8 Trigger an email alert via MailTrap (Day 7)
+
+Critical alerts (severity = critical) fan out to BOTH the webhook-logger (for stdout debugging) AND a MailTrap-backed email receiver. To verify email delivery end-to-end:
+
+```bash
+# 1. Stop the backend to fire the BackendDown alert
+docker compose stop backend
+
+# 2. Wait for the full alert pipeline (~80 seconds)
+#    - Prometheus scrape interval: 15s
+#    - Alert "for" duration: 60s (alert is firing only after persisting this long)
+#    - AlertManager group_wait: 0s for critical
+#    - Network/processing: ~5s
+sleep 90
+
+# 3. Watch the relay logs for the incoming webhook
+docker compose logs mailtrap-relay --tail 30
+```
+
+You should see:
+
+```
+mailtrap_relay | Sent alert: BackendDown (FIRING, critical)
+"POST /webhook HTTP/1.1" 200 62
+```
+
+**Then check MailTrap** — open https://mailtrap.io/inboxes → your sandbox inbox. There should be a new email titled `[FIRING] Football MLOps: BackendDown`.
+
+Bring the backend back:
+
+```bash
+docker compose start backend
+```
+
+After ~90 seconds (AlertManager's `group_interval`), a follow-up `[RESOLVED]` email arrives in MailTrap.
+
+**Setup note:** This requires `.env` populated with MailTrap credentials. Copy `.env.example` to `.env` and fill in your `MAILTRAP_API_TOKEN`, `MAILTRAP_INBOX_ID`, etc. Sign up at https://mailtrap.io for a free sandbox account.
+
+### 6.9 Stop the stack
 
 ```bash
 docker compose down              # stops and removes containers; volumes persist
@@ -357,7 +417,7 @@ DVC-tracked, with a nested `algorithms.{lightgbm,xgboost}` structure (Day 7 refa
 
 Two parallel training stages are defined: `train` (canonical LightGBM, registered as production) and `train_xgboost` (XGBoost comparison experiment, not registered). Run a specific stage with `dvc repro <stage_name>`.
 
-### 7.3 Authentication
+### 7.3 Authentication and secrets
 
 Out-of-the-box credentials:
 
@@ -367,6 +427,24 @@ Out-of-the-box credentials:
 - **Prometheus / AlertManager:** no authentication (academic)
 
 For a production deployment, replace these with secrets injected via `.env` and use a reverse proxy (Traefik or Nginx) for HTTPS termination.
+
+This project demonstrates the `.env` pattern for the MailTrap email-alert relay. Copy `.env.example` to `.env` and fill in real values; `.env` is gitignored so credentials never get committed. Docker Compose loads `.env` automatically.
+
+The `.env` file should contain:
+
+```
+# MailTrap REST API (for AlertManager email relay)
+MAILTRAP_API_TOKEN=<your_real_token>
+MAILTRAP_INBOX_ID=<your_inbox_id>
+MAILTRAP_TO_EMAIL=<your_test_email>
+MAILTRAP_FROM_EMAIL=alerts@football-mlops.example.com
+MAILTRAP_FROM_NAME=Football MLOps AlertManager
+
+# Airflow user UID (matches host user, prevents permission errors on bind mounts)
+AIRFLOW_UID=1000
+```
+
+Sign up at https://mailtrap.io for a free sandbox inbox.
 
 ---
 
@@ -489,9 +567,24 @@ Or modify a tracked input (e.g., bump `algorithms.lightgbm.num_leaves` in `param
 
 This is documented AlertManager behavior, not a bug. AlertManager respects `group_interval: 5m` — alerts that resolve faster than 5 minutes are intentionally not resent as "resolved" to reduce notification spam. In production, real outages last longer than 5 minutes and you'll see both notifications.
 
-### 9.8 Out-of-memory errors during `docker compose up`
+### 9.8 mailtrap-relay container exits immediately on startup
 
-The 11-container stack uses ~3 GB RAM at peak. If your machine has less than 4 GB free:
+Most likely missing or malformed `.env` file. The relay refuses to start if `MAILTRAP_API_TOKEN`, `MAILTRAP_INBOX_ID`, or `MAILTRAP_TO_EMAIL` are unset. Check:
+
+```bash
+# Should show all required env vars resolved
+docker compose config | grep -i mailtrap
+
+# If they show as empty strings, .env isn't being loaded
+ls -la .env
+cat .env | grep MAILTRAP
+```
+
+Fix by ensuring `.env` exists in the project root with valid MailTrap credentials. The other 11 services run independently of mailtrap-relay — only email alerting is affected.
+
+### 9.9 Out-of-memory errors during `docker compose up`
+
+The 12-container stack uses ~3 GB RAM at peak. If your machine has less than 4 GB free:
 
 - Close other applications
 - Or reduce the stack: bring up only the core services (`mlflow`, `backend`, `frontend`) and skip the observability stack temporarily
@@ -501,7 +594,7 @@ The 11-container stack uses ~3 GB RAM at peak. If your machine has less than 4 G
 docker compose up -d mlflow backend frontend
 ```
 
-### 9.9 The frontend loads but predictions fail with CORS errors
+### 9.10 The frontend loads but predictions fail with CORS errors
 
 Open browser DevTools → Network tab. If you see CORS-blocked requests, the backend's CORS middleware isn't configured correctly. Check `src/api/main.py` for:
 
@@ -523,14 +616,14 @@ For a quick demonstration of every rubric area:
 
 | Time | Action | URL | What to point out |
 |---|---|---|---|
-| 0:00 | `docker compose up -d` | terminal | "11 containers, one command" |
+| 0:00 | `docker compose up -d` | terminal | "12 containers, one command" |
 | 0:30 | Open operations console, click into prediction UI | localhost:8080/dashboard.html | "One landing page; each tool keeps its native UI depth" |
 | 0:45 | Predict Real Madrid vs Granada | localhost:8080 | "Probability bars + container ID + latency" |
 | 1:15 | Open MLflow (3 runs to compare) | localhost:5000 | "Baseline, ELO experiment, XGBoost experiment all logged" |
-| 1:45 | Open Airflow | localhost:8081 | "Scheduled DAG with sensor + pool + retries + quality gate" |
+| 1:45 | Open Airflow | localhost:8081 | "Two DAGs: weekly training + daily drift check; sensor + pool + retries + quality gate" |
 | 2:15 | Open Grafana | localhost:3000 | "11-panel dashboard following Four Golden Signals" |
 | 2:45 | Open Prometheus targets | localhost:9090/targets | "Backend /metrics scraped every 15s" |
-| 3:15 | Stop backend, watch BackendDown fire | terminal + localhost:9093 | "Alert state machine: inactive → pending → firing" |
+| 3:15 | Stop backend, watch BackendDown fire + email arrive | terminal + localhost:9093 + mailtrap.io | "Alert fires → webhook logged → MailTrap email" |
 | 3:45 | Restart backend | terminal | "Recovery" |
 | 4:00 | Run pytest suite | terminal | "14 tests in under 5 seconds; contract test prevents silent train/serve drift" |
 | 4:30 | Run drift evaluation script | terminal | "Mild drift detected on unseen 2015/16 season; F1 −1.4%" |
@@ -555,4 +648,5 @@ For a quick demonstration of every rubric area:
 | Version | Date | Author | Notes |
 |---|---|---|---|
 | 1.0 | 2026-04-28 | Muhammed Fiyas | Initial user manual covering v0.5.0 milestone |
-| 1.1 | 2026-04-28 | Muhammed Fiyas | Day 7: added operations console (8 UIs total), drift evaluation workflow (§6.7), nested algorithms params structure note (§7.2), updated demo walkthrough |
+| 1.1 | 2026-04-28 | Muhammed Fiyas | Day 7 mid: added operations console (8 UIs total), drift evaluation workflow (§6.7), nested algorithms params structure note (§7.2), updated demo walkthrough |
+| 1.2 | 2026-04-28 | Muhammed Fiyas | Day 7 final: 12 containers (added mailtrap-relay), MailTrap email-alert workflow (§6.8), `.env` setup pattern (§7.3), drift detection DAG mention (§6.7), troubleshooting for relay startup (§9.8) |

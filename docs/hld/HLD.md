@@ -155,12 +155,13 @@ flowchart TB
 | **postgres** | Airflow metadata DB (DAG runs, task instances, connections) | Postgres 16 |
 | **prometheus** | Scrapes `/metrics` from backend; stores time-series; evaluates alert rules | Prometheus 2.55 |
 | **grafana** | Renders dashboards by querying Prometheus | Grafana 11.3 |
-| **alertmanager** | Receives alerts from Prometheus; groups, routes, deduplicates | AlertManager 0.27 |
+| **alertmanager** | Receives alerts from Prometheus; groups, routes, deduplicates; fans out critical alerts to webhook + email | AlertManager 0.27 |
+| **mailtrap-relay** | Receives AlertManager webhooks for critical alerts and forwards them as emails via MailTrap REST API (Day 7) | Flask + gunicorn |
 | **webhook-logger** | Receives webhook POSTs and pretty-prints alert payloads (stand-in for Slack/PagerDuty) | FastAPI |
 
 ### 4.4 Why this many services
 
-Eleven services seems heavy for a one-week project. The choice is deliberate: **each service maps to a distinct rubric concern**, and combining services would conflate responsibilities that are intentionally separated in real production stacks.
+Twelve services seems heavy for a one-week project. The choice is deliberate: **each service maps to a distinct rubric concern**, and combining services would conflate responsibilities that are intentionally separated in real production stacks.
 
 We *could* have:
 

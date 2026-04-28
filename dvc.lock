@@ -154,3 +154,31 @@ stages:
       hash: md5
       md5: f222610802428254a83a466df81daee3
       size: 671
+  evaluate_production:
+    cmd: python -m src.evaluation.evaluate_production
+    deps:
+    - path: data/production/season_2015_16.csv
+      hash: md5
+      md5: 12cab36f0d216ad1552495ea2e6cb356
+      size: 869824
+    - path: models/lightgbm_baseline.pkl
+      hash: md5
+      md5: 8304e0e7eb6ae8daf149bfce8a65ec95
+      size: 503484
+    - path: models/metrics.json
+      hash: md5
+      md5: 324fbec575497c3fb27f9d1a4ad4c2ca
+      size: 1368
+    - path: src/evaluation/evaluate_production.py
+      hash: md5
+      md5: 8b0f8e4a66116db5bfa110fb9a5250da
+      size: 11045
+    - path: src/utils/logger.py
+      hash: md5
+      md5: da79a8b06744206d7f95a3117878ecab
+      size: 3881
+    outs:
+    - path: models/production_drift_report.json
+      hash: md5
+      md5: cb0a539938a8fbdfa79000a23c8fff0e
+      size: 483

@@ -59,3 +59,15 @@ stages:
     metrics:
       - models/xgboost_metrics.json:
           cache: false
+
+  evaluate_production:
+    cmd: python -m src.evaluation.evaluate_production
+    deps:
+      - src/evaluation/evaluate_production.py
+      - src/utils/logger.py
+      - data/production/season_2015_16.csv
+      - models/lightgbm_baseline.pkl
+      - models/metrics.json
+    metrics:
+      - models/production_drift_report.json:
+          cache: false
